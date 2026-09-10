@@ -18,10 +18,28 @@ from routes.reports import bp as reports_bp
 
 def create_app():
     app = Flask(__name__)
+
+    @app.route("/", methods=["GET"])
+    def home():
+        return {
+            "message": "Employee Training Management API is running",
+            "status": "success"
+        }, 200
+
     app.config["JWT_SECRET_KEY"] = JWT_SECRET_KEY
+
     from config import JWT_ACCESS_TOKEN_EXPIRES
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = JWT_ACCESS_TOKEN_EXPIRES
-    CORS(app, resources={r"/api/*": {"origins": FRONTEND_ORIGIN}})
+
+    CORS(
+        app,
+        resources={
+            r"/api/*": {
+                "origins": FRONTEND_ORIGIN
+            }
+        }
+    )
+
     JWTManager(app)
 
     app.register_blueprint(health_bp, url_prefix="/api")
@@ -36,7 +54,11 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(notifications_bp)
     app.register_blueprint(reports_bp)
+
     create_indexes()
     ensure_admin_user()
 
     return app
+    
+
+   
