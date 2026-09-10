@@ -34,7 +34,7 @@ export default function Login() {
     if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
     setSubmitting(true);
     try {
-      await api.post("/auth/signup", {
+      await api.post("/api/auth/signup", {
         employeeId: form.employeeId, name: form.name, email: form.email,
         password: form.password, department: form.department,
         designation: form.designation, reportingManager: form.reportingManager
