@@ -1,7 +1,12 @@
 import certifi
 from pymongo import MongoClient
 
-from config import MONGO_URI, MONGO_DB
+from config import Config
+
+
+MONGO_URI = Config.MONGO_URI
+MONGO_DB = Config.MONGO_DB
+
 
 client = MongoClient(
     MONGO_URI,
