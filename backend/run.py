@@ -1,79 +1,74 @@
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 
-from config import FRONTEND_ORIGIN, JWT_SECRET_KEY
+from config import Config
 
 from routes.auth import auth_bp
-from routes.dashboard import bp as dashboard_bp
-from routes.notifications import bp as notifications_bp
-from routes.analytics import bp as analytics_bp
-from routes.evaluations import bp as evaluations_bp
-from routes.reports import bp as reports_bp
-
-from routes.attendance import attendance_bp
-from routes.departments import departments_bp
-from routes.employees import employees_bp
 from routes.feedback import feedback_bp
+from routes.attendance import attendance_bp
 from routes.trainings import trainings_bp
-from routes.health import health_bp
+from routes.employees import employees_bp
+from routes.departments import departments_bp
+from routes.dashboard import dashboard_bp
+from routes.evaluations import evaluations_bp
+from routes.analytics import analytics_bp
+from routes.notifications import notifications_bp
+from routes.reports import reports_bp
 
 
+# Create Flask application
 app = Flask(__name__)
+app.config.from_object(Config)
 
 
-# =========================================================
-# JWT CONFIGURATION
-# =========================================================
-
-app.config["JWT_SECRET_KEY"] = JWT_SECRET_KEY
-
-jwt = JWTManager(app)
-
-
-# =========================================================
-# CORS CONFIGURATION
-# =========================================================
-
+# CORS
 CORS(
     app,
     resources={
         r"/api/*": {
-            "origins": [FRONTEND_ORIGIN]
+            "origins": [
+                "https://employeetrainingmanagement-2.onrender.com",
+                "http://localhost:5173",
+            ],
+            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": True,
         }
-    },
-    supports_credentials=True,
+    }
 )
 
+# JWT
+JWTManager(app)
 
-# =========================================================
-# API BLUEPRINTS
-# =========================================================
 
+# Register blueprints
 app.register_blueprint(auth_bp)
-
+app.register_blueprint(feedback_bp)
+app.register_blueprint(attendance_bp)
+app.register_blueprint(trainings_bp)
+app.register_blueprint(employees_bp)
+app.register_blueprint(departments_bp)
 app.register_blueprint(dashboard_bp)
-app.register_blueprint(notifications_bp)
-app.register_blueprint(analytics_bp)
 app.register_blueprint(evaluations_bp)
+app.register_blueprint(analytics_bp)
+app.register_blueprint(notifications_bp)
 app.register_blueprint(reports_bp)
 
-app.register_blueprint(attendance_bp)
-app.register_blueprint(departments_bp)
-app.register_blueprint(employees_bp)
-app.register_blueprint(feedback_bp)
-app.register_blueprint(trainings_bp)
 
-app.register_blueprint(health_bp)
+# Health check
+@app.route("/health")
+def health():
+    return {"status": "ok"}, 200
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        return "", 200
 
-
-# =========================================================
-# APPLICATION START
-# =========================================================
-
+# Local development
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=5000,
-        debug=True,
+        debug=True
     )
