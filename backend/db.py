@@ -27,4 +27,4 @@ def create_indexes():
     db.training_participants.create_index(
         [("trainingId", 1), ("employeeId", 1)],
         unique=True,
-    )
+)
