@@ -17,7 +17,6 @@ from routes.notifications import notifications_bp
 from routes.reports import reports_bp
 
 
-# Create Flask application
 app = Flask(__name__)
 app.config.from_object(Config)
 
@@ -31,14 +30,30 @@ CORS(
                 "https://employeetrainingmanagement-2.onrender.com",
                 "http://localhost:5173",
             ],
-            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"],
+            "methods": [
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "OPTIONS",
+            ],
+            "allow_headers": [
+                "Content-Type",
+                "Authorization",
+            ],
             "supports_credentials": True,
         }
-    }
+    },
 )
 
-# JWT
+
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        return "", 200
+
+
 JWTManager(app)
 
 
@@ -56,19 +71,14 @@ app.register_blueprint(notifications_bp)
 app.register_blueprint(reports_bp)
 
 
-# Health check
 @app.route("/health")
 def health():
     return {"status": "ok"}, 200
-@app.before_request
-def handle_preflight():
-    if request.method == "OPTIONS":
-        return "", 200
 
-# Local development
+
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=5000,
-        debug=True
+        debug=True,
     )
