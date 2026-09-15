@@ -8,7 +8,7 @@ from db import db
 from models.user import serialize_user, build_user
 from config import ADMIN_EMPLOYEE_ID, ADMIN_PASSWORD, ADMIN_NAME, ADMIN_DEPARTMENT
 
-auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
+auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth/login")
 
 
 def ensure_admin_user():
