@@ -19,13 +19,8 @@ from routes.reports import reports_bp
 
 app = Flask(__name__)
 
-# Load configuration
 app.config.from_object(Config)
 
-
-# --------------------------------
-# CORS
-# --------------------------------
 
 CORS(
     app,
@@ -59,16 +54,8 @@ def handle_preflight():
         return "", 200
 
 
-# --------------------------------
-# JWT
-# --------------------------------
-
 JWTManager(app)
 
-
-# --------------------------------
-# Register Blueprints
-# --------------------------------
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(feedback_bp)
@@ -83,20 +70,10 @@ app.register_blueprint(notifications_bp)
 app.register_blueprint(reports_bp)
 
 
-# --------------------------------
-# Health Check
-# --------------------------------
-
 @app.route("/health")
 def health():
-    return {
-        "status": "ok"
-    }, 200
+    return {"status": "ok"}, 200
 
-
-# --------------------------------
-# Local Development
-# --------------------------------
 
 if __name__ == "__main__":
     app.run(

@@ -6,7 +6,12 @@ from pymongo.errors import DuplicateKeyError
 
 from db import db
 from models.user import serialize_user, build_user
-from config import ADMIN_EMPLOYEE_ID, ADMIN_PASSWORD, ADMIN_NAME, ADMIN_DEPARTMENT
+from config import Config 
+
+Config.ADMIN_EMPLOYEE_ID
+Config.ADMIN_PASSWORD
+Config.ADMIN_NAME
+Config.ADMIN_DEPARTMENT
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth/login")
 
