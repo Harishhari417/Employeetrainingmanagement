@@ -2,9 +2,9 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from db import db
 
-bp = Blueprint("analytics", __name__, url_prefix="/api/analytics")
+analytics_bp = Blueprint("analytics", __name__, url_prefix="/api/analytics")
 
-@bp.get("")
+@analytics_bp.get("")
 @jwt_required()
 def analytics():
     feedback = list(db.feedback.find({}, {"ratings": 1}))

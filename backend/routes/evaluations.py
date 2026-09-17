@@ -4,7 +4,7 @@ from flask_jwt_extended import jwt_required, get_jwt
 from db import db
 from bson import ObjectId
 
-bp = Blueprint("evaluations", __name__, url_prefix="/api/evaluations")
+evaluations_bp = Blueprint("evaluations", __name__, url_prefix="/api/evaluations")
 
 def serialize(doc):
     if not doc: return None
@@ -31,7 +31,7 @@ def sync_due_evaluations():
                 upsert=True,
             )
 
-@bp.get("")
+@evaluations_bp.get("")
 @jwt_required()
 def list_evaluations():
     sync_due_evaluations()
@@ -48,7 +48,7 @@ def list_evaluations():
         row["employeeName"] = emp.get("name", row.get("employeeId")); row["department"] = emp.get("department", ""); row["trainingTitle"] = training.get("title", "")
     return jsonify(rows)
 
-@bp.put("/<evaluation_id>")
+@evaluations_bp.put("/<evaluation_id>")
 @jwt_required()
 def update_evaluation(evaluation_id):
     if get_jwt().get("role") not in {"HR_ADMIN", "MANAGER"}:

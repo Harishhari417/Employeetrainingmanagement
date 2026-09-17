@@ -4,9 +4,9 @@ from flask import Blueprint, Response, request
 from flask_jwt_extended import jwt_required, get_jwt
 from db import db
 
-bp = Blueprint("reports", __name__, url_prefix="/api/reports")
+reports_bp = Blueprint("reports", __name__, url_prefix="/api/reports")
 
-@bp.get("/training")
+@reports_bp.get("/training")
 @jwt_required()
 def training_report():
     claims = get_jwt()
@@ -47,7 +47,7 @@ def training_report():
         "Content-Disposition": "attachment; filename=training-report.csv"
     })
 
-@bp.get("/employees")
+@reports_bp.get("/employees")
 @jwt_required()
 def employee_report():
     if get_jwt().get("role") != "HR_ADMIN":

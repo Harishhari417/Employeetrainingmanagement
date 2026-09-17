@@ -3,9 +3,9 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt
 from db import db
 
-bp = Blueprint("notifications", __name__, url_prefix="/api/notifications")
+notifications_bp = Blueprint("notifications", __name__, url_prefix="/api/notifications")
 
-@bp.get("")
+@notifications_bp.get("")
 @jwt_required()
 def notifications():
     claims = get_jwt()

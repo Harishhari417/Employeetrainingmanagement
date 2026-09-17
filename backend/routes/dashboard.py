@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt
 from db import db
 
-bp = Blueprint("dashboard", __name__, url_prefix="/api/dashboard")
+dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/api/dashboard")
 
 def count_for_role(role, department=None, employee_id=None):
     if role == "EMPLOYEE":
@@ -18,7 +18,7 @@ def count_for_role(role, department=None, employee_id=None):
     participants = list(db.training_participants.find({}, {"attendance": 1}))
     return participants, db.feedback.count_documents({})
 
-@bp.get("/admin")
+@dashboard_bp.get("/admin")
 @jwt_required()
 def admin_dashboard():
     claims = get_jwt(); role = claims.get("role")
