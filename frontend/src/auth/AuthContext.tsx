@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     api
-      .get<AuthUser>("/api/auth/me")
+      .get<AuthUser>("/auth/me")
       .then((res) => {
         setUser(res.data);
         localStorage.setItem(
@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const res = await api.post<{
           accessToken: string;
           user: AuthUser;
-        }>("/api/auth/login", {
+        }>("/auth/login", {
           username,
           password,
         });

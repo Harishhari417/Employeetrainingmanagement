@@ -8,34 +8,39 @@ from db import db
 from models.user import serialize_user, build_user
 from config import Config 
 
-Config.ADMIN_EMPLOYEE_ID
-Config.ADMIN_PASSWORD
-Config.ADMIN_NAME
-Config.ADMIN_DEPARTMENT
 
-auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth/login")
+
+auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 
 def ensure_admin_user():
     """Create the initial HR account only when ADMIN_PASSWORD is configured."""
-    if not ADMIN_PASSWORD:
+
+    if not Config.ADMIN_PASSWORD:
         return
-    existing = db.users.find_one({"username": ADMIN_EMPLOYEE_ID.lower()})
+
+    existing = db.users.find_one({
+        "username": Config.ADMIN_EMPLOYEE_ID.lower()
+    })
+
     if existing:
         return
+
     now = datetime.now(timezone.utc)
+
     user = build_user(
-        ADMIN_EMPLOYEE_ID,
-        ADMIN_NAME,
-        ADMIN_PASSWORD,
+        Config.ADMIN_EMPLOYEE_ID,
+        Config.ADMIN_NAME,
+        Config.ADMIN_PASSWORD,
         "HR_ADMIN",
-        ADMIN_EMPLOYEE_ID,
-        ADMIN_DEPARTMENT,
+        Config.ADMIN_EMPLOYEE_ID,
+        Config.ADMIN_DEPARTMENT,
     )
+
     employee = {
-        "employeeId": ADMIN_EMPLOYEE_ID,
-        "name": ADMIN_NAME,
-        "department": ADMIN_DEPARTMENT,
+        "employeeId": Config.ADMIN_EMPLOYEE_ID,
+        "name": Config.ADMIN_NAME,
+        "department": Config.ADMIN_DEPARTMENT,
         "designation": "HR Administrator",
         "reportingManager": "",
         "email": "",
@@ -43,13 +48,16 @@ def ensure_admin_user():
         "createdAt": now,
         "updatedAt": now,
     }
+
     try:
         db.employees.update_one(
-            {"employeeId": ADMIN_EMPLOYEE_ID},
+            {"employeeId": Config.ADMIN_EMPLOYEE_ID},
             {"$setOnInsert": employee},
             upsert=True,
         )
+
         db.users.insert_one(user)
+
     except DuplicateKeyError:
         pass
 

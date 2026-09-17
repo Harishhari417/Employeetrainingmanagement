@@ -18,9 +18,7 @@ from routes.reports import reports_bp
 
 
 app = Flask(__name__)
-
 app.config.from_object(Config)
-
 
 CORS(
     app,
@@ -47,15 +45,7 @@ CORS(
     },
 )
 
-
-@app.before_request
-def handle_preflight():
-    if request.method == "OPTIONS":
-        return "", 200
-
-
 JWTManager(app)
-
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(feedback_bp)

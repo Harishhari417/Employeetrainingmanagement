@@ -1,9 +1,11 @@
 import axios from "axios";
 
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:5000/api";
+
 export const api = axios.create({
-  baseURL:
-    import.meta.env.VITE_API_URL ||
-    "https://employeetrainingmanagement-1.onrender.com",
+  baseURL: API_URL.replace(/\/+$/, ""),
   headers: {
     "Content-Type": "application/json",
   },
@@ -25,7 +27,10 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem("access_token");
       localStorage.removeItem("auth_user");
-      window.location.href = "/login";
+
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
     }
 
     return Promise.reject(error);
