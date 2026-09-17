@@ -1,31 +1,35 @@
-import certifi
+import os
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
-from config import Config
-
-
-client = MongoClient(
-    Config.MONGO_URI,
-    tls=True,
-    tlsCAFile=certifi.where(),
-    serverSelectionTimeoutMS=10000,
-    connectTimeoutMS=10000,
-    socketTimeoutMS=10000,
-)
-
-db = client[Config.MONGO_DB]
+_client = None
+_db = None
 
 
-def create_indexes():
-    db.employees.create_index(
-        "employeeId",
-        unique=True
+def get_db():
+    global _client, _db
+
+    if _db is not None:
+        return _db
+
+    mongo_uri = os.getenv("MONGO_URI")
+
+    if not mongo_uri:
+        raise RuntimeError("MONGO_URI environment variable is not configured")
+
+    db_name = os.getenv("MONGO_DB", "employee_training")
+
+    _client = MongoClient(
+        mongo_uri,
+        serverSelectionTimeoutMS=10000,
+        connectTimeoutMS=10000,
+        socketTimeoutMS=10000,
     )
 
-    db.training_participants.create_index(
-        [
-            ("trainingId", 1),
-            ("employeeId", 1)
-        ],
-        unique=True,
-    )
+    # Force connection immediately so configuration problems
+    # are detected clearly.
+    _client.admin.command("ping")
+
+    _db = _client[db_name]
+
+    return _db
