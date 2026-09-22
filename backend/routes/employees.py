@@ -28,7 +28,9 @@ def list_employees():
 
     query = {}
 
-    if department:
+    if claims.get("role") == "EMPLOYEE":
+        query["employeeId"] = claims.get("employeeId")
+    elif department:
         query["department"] = department
 
     records = [

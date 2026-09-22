@@ -177,7 +177,56 @@ def filter_active_employee_ids(employee_ids):
 @trainings_bp.route("", methods=["GET"])
 @jwt_required()
 def get_trainings():
-    trainings = list(trainings_collection.find().sort("trainingDate", -1))
+    claims = get_jwt()
+    query = {}
+    role = claims.get("role")
+    employee_id = claims.get("employeeId")
+
+    if role == "EMPLOYEE":
+        assigned = participants_collection.distinct("trainingId", {"employeeId": employee_id})
+        valid_ids = [to_object_id(x) for x in assigned if to_object_id(x)]
+        query["_id"] = {"$in": valid_ids}
+    elif role == "MANAGER":
+        ids = [x.get("employeeId") for x in employees_collection.find({"department": claims.get("department")}, {"employeeId": 1, "_id": 0}) if x.get("employeeId")]
+        assigned = participants_collection.distinct("trainingId", {"employeeId": {"$in": ids}})
+        valid_ids = [to_object_id(x) for x in assigned if to_object_id(x)]
+        query["_id"] = {"$in": valid_ids}
+
+    search = request.args.get("search", "").strip()
+    training_type = request.args.get("trainingType", "").strip()
+    status = request.args.get("status", "").strip()
+    trainer = request.args.get("trainerName", "").strip()
+    start_date = request.args.get("startDate", "").strip()
+    end_date = request.args.get("endDate", "").strip()
+
+    if search:
+        query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"trainerName": {"$regex": search, "$options": "i"}},
+            {"content": {"$regex": search, "$options": "i"}},
+        ]
+    if training_type:
+        query["trainingType"] = training_type
+    if status and status != "All":
+        query["status"] = status
+    if trainer:
+        query["trainerName"] = {"$regex": trainer, "$options": "i"}
+
+    date_range = {}
+    if start_date:
+        parsed = parse_date(start_date)
+        if parsed:
+            date_range["$gte"] = parsed.isoformat()
+    if end_date:
+        parsed = parse_date(end_date)
+        if parsed:
+            if len(end_date) == 10:
+                parsed = parsed.replace(hour=23, minute=59, second=59)
+            date_range["$lte"] = parsed.isoformat()
+    if date_range:
+        query["trainingDate"] = date_range
+
+    trainings = list(trainings_collection.find(query).sort("trainingDate", -1))
 
     # one query for all participants instead of one per training
     participants_map = {}
@@ -203,6 +252,8 @@ def get_trainings():
 @trainings_bp.route("", methods=["POST"])
 @jwt_required()
 def create_training():
+    if get_jwt().get("role") not in {"HR_ADMIN", "MANAGER"}:
+        return jsonify({"message": "Manager or HR Admin permission required."}), 403
     data = request.get_json(silent=True) or {}
 
     title = str(data.get("title", "")).strip()
@@ -310,6 +361,8 @@ def get_training(training_id):
 @trainings_bp.route("/<training_id>", methods=["PUT"])
 @jwt_required()
 def update_training(training_id):
+    if get_jwt().get("role") not in {"HR_ADMIN", "MANAGER"}:
+        return jsonify({"message": "Manager or HR Admin permission required."}), 403
     object_id = to_object_id(training_id)
     if not object_id:
         return jsonify({"message": "Invalid training ID."}), 400
@@ -361,6 +414,8 @@ def update_training(training_id):
 @trainings_bp.route("/<training_id>", methods=["DELETE"])
 @jwt_required()
 def delete_training(training_id):
+    if get_jwt().get("role") not in {"HR_ADMIN", "MANAGER"}:
+        return jsonify({"message": "Manager or HR Admin permission required."}), 403
     object_id = to_object_id(training_id)
     if not object_id:
         return jsonify({"message": "Invalid training ID."}), 400
@@ -381,6 +436,9 @@ def delete_training(training_id):
 @trainings_bp.route("/<training_id>/participants", methods=["PUT"])
 @jwt_required()
 def update_participants(training_id):
+    claims = get_jwt()
+    if claims.get("role") not in {"HR_ADMIN", "MANAGER"}:
+        return jsonify({"message": "Manager or HR Admin permission required."}), 403
     object_id = to_object_id(training_id)
     if not object_id:
         return jsonify({"message": "Invalid training ID."}), 400
@@ -402,6 +460,9 @@ def update_participants(training_id):
         return jsonify({"message": "employeeIds must be an array."}), 400
 
     valid_ids = filter_active_employee_ids(clean_id_list(raw_ids))
+    if claims.get("role") == "MANAGER":
+        allowed = {x.get("employeeId") for x in employees_collection.find({"department": claims.get("department")}, {"employeeId": 1, "_id": 0})}
+        valid_ids = [x for x in valid_ids if x in allowed]
 
     sync_participants(training_id, valid_ids)
 
@@ -421,6 +482,8 @@ def update_participants(training_id):
 @trainings_bp.route("/<training_id>/complete", methods=["POST"])
 @jwt_required()
 def complete_training(training_id):
+    if get_jwt().get("role") not in {"HR_ADMIN", "MANAGER"}:
+        return jsonify({"message": "Manager or HR Admin permission required."}), 403
     object_id = to_object_id(training_id)
     if not object_id:
         return jsonify({"message": "Invalid training ID."}), 400
@@ -438,7 +501,7 @@ def complete_training(training_id):
 
     trainings_collection.update_one(
         {"_id": object_id},
-        {"$set": {"status": "Completed", "updatedAt": timestamp}}
+        {"$set": {"status": "Completed", "completedAt": timestamp, "updatedAt": timestamp}}
     )
 
     participants_collection.update_many(
@@ -459,6 +522,8 @@ def complete_training(training_id):
 @trainings_bp.route("/<training_id>/cancel", methods=["POST"])
 @jwt_required()
 def cancel_training(training_id):
+    if get_jwt().get("role") not in {"HR_ADMIN", "MANAGER"}:
+        return jsonify({"message": "Manager or HR Admin permission required."}), 403
     object_id = to_object_id(training_id)
     if not object_id:
         return jsonify({"message": "Invalid training ID."}), 400
