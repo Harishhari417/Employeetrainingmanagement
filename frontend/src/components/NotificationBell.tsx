@@ -10,9 +10,9 @@ export default function NotificationBell() {
 
   useEffect(() => {
     const load = () => api.get<{items: Notice[]}>("/notifications").then(r=>setItems(r.data.items)).catch(()=>{});
-    load();
+    const first = window.setTimeout(load, 1000);
     const timer = window.setInterval(load, 60000);
-    return () => window.clearInterval(timer);
+    return () => { window.clearTimeout(first); window.clearInterval(timer); };
   }, []);
 
   return <div className="relative">

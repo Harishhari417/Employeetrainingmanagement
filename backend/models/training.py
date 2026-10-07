@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from bson import ObjectId
 
 def serialize_training(doc):
     if not doc:
@@ -10,19 +9,23 @@ def serialize_training(doc):
 
 def build_training(payload):
     now = datetime.now(timezone.utc)
+    start = payload.get("startDate") or payload.get("trainingDate")
+    end = payload.get("endDate") or start
     return {
-        "title": payload.get("title", "").strip(),
-        "content": payload.get("content", "").strip(),
-        "trainingType": payload.get("trainingType", "Technical"),
-        "trainerName": payload.get("trainerName", "").strip(),
+        "title": str(payload.get("title", "")).strip(),
+        "content": str(payload.get("content", "")).strip(),
+        "trainingType": str(payload.get("trainingType", "")).strip(),
+        "trainerName": str(payload.get("trainerName", "")).strip(),
+        "trainerEmployeeId": str(payload.get("trainerEmployeeId", "")).strip(),
         "trainerCategory": payload.get("trainerCategory", "Internal"),
-        "venue": payload.get("venue", "").strip(),
+        "venue": str(payload.get("venue", "")).strip(),
         "departments": payload.get("departments", []),
         "traineeIds": payload.get("traineeIds", []),
-        "trainingDate": payload.get("trainingDate"),
-        "trainingMode": payload.get("trainingMode", "Company-wide"),
-        "durationMinutes": int(payload.get("durationMinutes", 0) or 0),
-        "status": payload.get("status", "Scheduled"),
+        "startDate": start,
+        "endDate": end,
+        "trainingDate": start,
+        "trainingMode": payload.get("trainingMode", "Offline"),
+        "status": payload.get("status", "Upcoming"),
         "createdAt": now,
         "updatedAt": now,
     }

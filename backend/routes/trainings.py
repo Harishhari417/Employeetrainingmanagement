@@ -91,7 +91,9 @@ def serialize_training(training, trainee_ids=None):
         "trainerEmployeeId": training.get("trainerEmployeeId", ""),
         "trainerCategory": training.get("trainerCategory", ""),
         "venue": training.get("venue", ""),
-        "trainingDate": training.get("trainingDate"),
+        "trainingDate": training.get("startDate", training.get("trainingDate")),
+        "startDate": training.get("startDate", training.get("trainingDate")),
+        "endDate": training.get("endDate", training.get("startDate", training.get("trainingDate"))),
         "trainingMode": training.get("trainingMode", ""),
         "durationMinutes": training.get("durationMinutes", 0),
         "status": training.get("status", "Upcoming"),
@@ -224,9 +226,9 @@ def get_trainings():
                 parsed = parsed.replace(hour=23, minute=59, second=59)
             date_range["$lte"] = parsed.isoformat()
     if date_range:
-        query["trainingDate"] = date_range
+        query["startDate"] = date_range
 
-    trainings = list(trainings_collection.find(query).sort("trainingDate", -1))
+    trainings = list(trainings_collection.find(query).sort("startDate", -1))
 
     # one query for all participants instead of one per training
     participants_map = {}
@@ -245,6 +247,13 @@ def get_trainings():
         )
         for training in trainings
     ]
+    if role == "EMPLOYEE":
+        participant_rows = {p.get("trainingId"): p for p in participants_collection.find({"employeeId": employee_id}, {"_id": 0, "trainingId": 1, "attendance": 1, "feedbackStatus": 1, "completionStatus": 1})}
+        for row in result:
+            p = participant_rows.get(row["_id"], {})
+            row["myAttendance"] = p.get("attendance", "Pending")
+            row["myFeedbackStatus"] = p.get("feedbackStatus", "Pending")
+            row["myCompletionStatus"] = p.get("completionStatus", "Not Started")
 
     return jsonify(result), 200
 
@@ -260,9 +269,16 @@ def create_training():
     if not title:
         return jsonify({"message": "Training title is required."}), 400
 
-    training_date = data.get("trainingDate")
-    if training_date and not parse_date(training_date):
-        return jsonify({"message": "Invalid training date."}), 400
+    start_date = data.get("startDate") or data.get("trainingDate")
+    end_date = data.get("endDate") or start_date
+    if not start_date or not parse_date(start_date) or not end_date or not parse_date(end_date):
+        return jsonify({"message": "Start date and end date are required and must be valid."}), 400
+    if parse_date(end_date) < parse_date(start_date):
+        return jsonify({"message": "End date/time cannot be before start date/time."}), 400
+
+    training_type = str(data.get("trainingType", "")).strip()
+    if not training_type:
+        return jsonify({"message": "Training type is required."}), 400
 
     trainer_category = data.get("trainerCategory", "Internal")
     trainer_employee_id = str(data.get("trainerEmployeeId", "") or "").strip()
@@ -292,16 +308,17 @@ def create_training():
     document = {
         "title": title,
         "content": str(data.get("content", "")).strip(),
-        "trainingType": data.get("trainingType", "Technical"),
+        "trainingType": training_type,
         "trainerName": str(data.get("trainerName", "")).strip(),
         "trainerEmployeeId": (
             trainer_employee_id if trainer_category == "Internal" else ""
         ),
         "trainerCategory": trainer_category,
         "venue": str(data.get("venue", "")).strip(),
-        "trainingDate": training_date,
+        "startDate": start_date,
+        "endDate": end_date,
+        "trainingDate": start_date,
         "trainingMode": data.get("trainingMode", "Offline"),
-        "durationMinutes": duration,
         "status": status,
         "departments": departments,
         "traineeIds": [],
@@ -371,8 +388,8 @@ def update_training(training_id):
 
     allowed_fields = [
         "title", "content", "trainingType", "trainerName",
-        "trainerEmployeeId", "trainerCategory", "venue", "trainingDate",
-        "trainingMode", "durationMinutes", "status", "departments",
+        "trainerEmployeeId", "trainerCategory", "venue", "startDate",
+        "endDate", "trainingDate", "trainingMode", "status", "departments",
     ]
 
     update_data = {f: data[f] for f in allowed_fields if f in data}
@@ -380,17 +397,19 @@ def update_training(training_id):
     if not update_data:
         return jsonify({"message": "No fields to update."}), 400
 
-    if "trainingDate" in update_data and update_data["trainingDate"]:
-        if not parse_date(update_data["trainingDate"]):
-            return jsonify({"message": "Invalid training date."}), 400
-
-    if "durationMinutes" in update_data:
-        try:
-            update_data["durationMinutes"] = int(
-                update_data["durationMinutes"] or 0
-            )
-        except (TypeError, ValueError):
-            return jsonify({"message": "Invalid duration."}), 400
+    if "trainingDate" in update_data:
+        update_data["startDate"] = update_data.pop("trainingDate")
+    if "startDate" in update_data and not parse_date(update_data["startDate"]):
+        return jsonify({"message": "Invalid start date."}), 400
+    if "endDate" in update_data and not parse_date(update_data["endDate"]):
+        return jsonify({"message": "Invalid end date."}), 400
+    current = trainings_collection.find_one({"_id": object_id}) or {}
+    start_check = update_data.get("startDate", current.get("startDate", current.get("trainingDate")))
+    end_check = update_data.get("endDate", current.get("endDate", start_check))
+    if start_check and end_check and parse_date(end_check) < parse_date(start_check):
+        return jsonify({"message": "End date/time cannot be before start date/time."}), 400
+    if "startDate" in update_data:
+        update_data["trainingDate"] = update_data["startDate"]
 
     update_data["updatedAt"] = now_utc()
 
@@ -518,6 +537,25 @@ def complete_training(training_id):
         )
     }), 200
 
+
+
+@trainings_bp.route("/<training_id>/complete-self", methods=["POST"])
+@jwt_required()
+def complete_self(training_id):
+    claims=get_jwt()
+    if claims.get("role")!="EMPLOYEE":
+        return jsonify({"message":"Only trainees can use this action"}),403
+    if not to_object_id(training_id):
+        return jsonify({"message":"Invalid training ID"}),400
+    participant=participants_collection.find_one({"trainingId":training_id,"employeeId":claims.get("employeeId")})
+    if not participant:
+        return jsonify({"message":"You are not assigned to this training"}),404
+    if participant.get("attendance") not in {"Present","Partial"}:
+        return jsonify({"message":"Attendance must be marked before completing the training"}),400
+    if participant.get("feedbackStatus")!="Submitted":
+        return jsonify({"message":"Please submit feedback before marking this training complete"}),400
+    participants_collection.update_one({"_id":participant["_id"]},{"$set":{"completionStatus":"Completed","completedAt":now_utc(),"updatedAt":now_utc()}})
+    return jsonify({"message":"Training marked complete"})
 
 @trainings_bp.route("/<training_id>/cancel", methods=["POST"])
 @jwt_required()

@@ -48,29 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
-
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-
-    api
-      .get<AuthUser>("/auth/me")
-      .then((res) => {
-        setUser(res.data);
-        localStorage.setItem(
-          "auth_user",
-          JSON.stringify(res.data),
-        );
-      })
-      .catch(() => {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("auth_user");
-        setUser(null);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    if (!token) setLoading(false);
+    else setLoading(false);
   }, []);
 
   const value = useMemo<AuthContextValue>(

@@ -65,15 +65,7 @@ def ensure_admin_user():
 @auth_bp.post("/signup")
 def signup():
     payload = request.get_json(silent=True) or {}
-
-    required = [
-        "employeeId",
-        "name",
-        "email",
-        "password",
-        "department",
-        "designation",
-    ]
+    required = ["employeeId", "name", "email", "password", "department", "designation", "role"]
     missing = [field for field in required if not str(payload.get(field, "")).strip()]
     if missing:
         return jsonify({"message": "Please fill all required fields", "fields": missing}), 400
@@ -84,56 +76,40 @@ def signup():
     password = str(payload["password"])
     department = str(payload["department"]).strip()
     designation = str(payload["designation"]).strip()
-    reporting_manager = str(payload.get("reportingManager", "")).strip()
+    requested_role = str(payload["role"]).strip().upper()
+    role = {"ADMIN": "HR_ADMIN", "HR_ADMIN": "HR_ADMIN", "MANAGER": "MANAGER", "EMPLOYEE": "EMPLOYEE"}.get(requested_role)
 
+    if role is None:
+        return jsonify({"message": "Role must be Admin, Manager or Employee"}), 400
     if len(password) < 8:
         return jsonify({"message": "Password must be at least 8 characters"}), 400
 
-    if db.users.find_one({"username": employee_id.lower()}):
-        return jsonify({"message": "Employee ID is already registered"}), 409
+    from routes.departments import DEPARTMENTS
+    if department not in DEPARTMENTS:
+        return jsonify({"message": "Please select a valid department"}), 400
 
-    if db.employees.find_one({"employeeId": employee_id}):
-        return jsonify({
-            "message": "Employee ID already exists. If HR created this employee, ask HR to provide the credentials."
-        }), 409
+    if db.users.find_one({"username": employee_id.lower()}) or db.employees.find_one({"employeeId": employee_id}):
+        return jsonify({"message": "Employee ID is already registered"}), 409
 
     now = datetime.now(timezone.utc)
     employee = {
-        "employeeId": employee_id,
-        "name": name,
-        "department": department,
-        "designation": designation,
-        "reportingManager": reporting_manager,
-        "email": email,
-        "status": "Active",
-        "createdAt": now,
-        "updatedAt": now,
-        "registeredBy": "SELF",
+        "employeeId": employee_id, "name": name, "department": department,
+        "designation": designation, "reportingManager": str(payload.get("reportingManager", "")).strip(),
+        "email": email, "status": "Active", "createdAt": now, "updatedAt": now,
+        "registeredBy": "SELF", "accountRole": role,
     }
-
-    user = build_user(
-        employee_id,
-        name,
-        password,
-        "EMPLOYEE",
-        employee_id,
-        department,
-    )
-
+    user = build_user(employee_id, name, password, role, employee_id, department)
     try:
         db.employees.insert_one(employee)
         db.users.insert_one(user)
     except DuplicateKeyError:
         db.employees.delete_one({"employeeId": employee_id, "registeredBy": "SELF"})
         return jsonify({"message": "Employee ID is already registered"}), 409
-    except Exception as exc:
+    except Exception:
         db.employees.delete_one({"employeeId": employee_id, "registeredBy": "SELF"})
         return jsonify({"message": "Unable to complete signup"}), 500
 
-    return jsonify({
-        "message": "Signup successful. You can now sign in with your Employee ID and password.",
-        "employeeId": employee_id,
-    }), 201
+    return jsonify({"message": "Signup successful", "employeeId": employee_id, "role": role}), 201
 
 
 @auth_bp.post("/login")

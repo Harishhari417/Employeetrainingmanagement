@@ -6,7 +6,7 @@ import LogoPlaceholder from "../components/LogoPlaceholder";
 import { useAuth } from "../auth/AuthContext";
 import { api } from "../services/api";
 
-const departments = ["Production","QA / Quality","Store","HR","Maintenance","Engineering / R&D","Finance","Purchase","Sales","Management","Other"];
+const departments = ["HR","Management","Finance","Maintenance","Production","QA / Quality","Stores","OQC"];
 
 export default function Login() {
   const { login } = useAuth();
@@ -16,7 +16,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [form, setForm] = useState({
     employeeId:"", name:"", email:"", password:"", confirmPassword:"",
-    department:"Production", designation:"", reportingManager:""
+    department:"Production", designation:"", reportingManager:"", role:"EMPLOYEE"
   });
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -24,7 +24,7 @@ export default function Login() {
 
   async function submitLogin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setError(""); setSubmitting(true);
-    try { await login(username.trim(), password); navigate("/", { replace: true }); }
+    try { await login(username.trim(), password); const raw=localStorage.getItem("auth_user"); const role=raw?JSON.parse(raw).role:"EMPLOYEE"; navigate(role==="HR_ADMIN"?"/admin":role==="MANAGER"?"/manager":"/employee",{replace:true}); }
     catch (err:any) { setError(err?.response?.data?.message ?? "Unable to sign in. Please check your credentials."); }
     finally { setSubmitting(false); }
   }
@@ -34,11 +34,7 @@ export default function Login() {
     if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
     setSubmitting(true);
     try {
-      await api.post("/auth/signup", {
-        employeeId: form.employeeId, name: form.name, email: form.email,
-        password: form.password, department: form.department,
-        designation: form.designation, reportingManager: form.reportingManager
-      });
+      await api.post("/auth/signup", form);
       setMessage("Signup successful. You can now sign in with your Employee ID and password.");
       setUsername(form.employeeId.toUpperCase()); setPassword("");
       setMode("login");
@@ -78,6 +74,7 @@ export default function Login() {
           {[
             ["Employee ID *","employeeId","text"],["Full name *","name","text"],["Email *","email","email"],["Position / Designation *","designation","text"],["Reporting Manager","reportingManager","text"]
           ].map(([label,key,type])=><label key={key} className={key==="email"?"block":"block"}><span className="mb-1.5 block text-sm font-medium">{label}</span><input required={!["reportingManager"].includes(key)} type={type} value={(form as any)[key]} onChange={e=>setForm({...form,[key]:e.target.value})} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-indigo-500"/></label>)}
+          <label><span className="mb-1.5 block text-sm font-medium">Account type *</span><select required value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="EMPLOYEE">Employee</option><option value="MANAGER">Manager</option><option value="ADMIN">Admin</option></select></label>
           <label><span className="mb-1.5 block text-sm font-medium">Department *</span><select required value={form.department} onChange={e=>setForm({...form,department:e.target.value})} className="w-full rounded-xl border border-slate-200 px-3 py-2.5">{departments.map(d=><option key={d}>{d}</option>)}</select></label>
           <label><span className="mb-1.5 block text-sm font-medium">Password *</span><input required minLength={8} type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} className="w-full rounded-xl border border-slate-200 px-3 py-2.5"/></label>
           <label><span className="mb-1.5 block text-sm font-medium">Confirm Password *</span><input required minLength={8} type="password" value={form.confirmPassword} onChange={e=>setForm({...form,confirmPassword:e.target.value})} className="w-full rounded-xl border border-slate-200 px-3 py-2.5"/></label>
