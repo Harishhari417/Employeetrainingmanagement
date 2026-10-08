@@ -35,7 +35,7 @@ def list_employees():
 
     records = [
         serialize_employee(employee)
-        for employee in db.employees.find(query).sort("name", 1)
+        for employee in db.employees.find(query, {"passwordHash": 0}).sort("name", 1)
     ]
 
     return jsonify(records), 200

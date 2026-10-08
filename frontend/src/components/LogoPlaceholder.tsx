@@ -1,7 +1,10 @@
+
 export default function LogoPlaceholder() {
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-500">
-      LOGO
-    </div>
+    <img
+      src="/EVIG-Intergration_horizantal_Logo_1500-1.png"
+      alt="EVIG Integration"
+      className="h-12 w-auto max-w-[190px] object-contain"
+    />
   );
 }

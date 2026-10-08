@@ -14,12 +14,6 @@ type Employee = {
   status: string;
 };
 
-type Department = {
-  _id: string;
-  name: string;
-  status: string;
-};
-
 type EmployeeForm = {
   employeeId: string;
   name: string;
@@ -44,7 +38,6 @@ const emptyForm: EmployeeForm = {
 
 export default function Employees() {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -56,23 +49,14 @@ export default function Employees() {
     try {
       setError("");
 
-      const [employeeResponse, departmentResponse] = await Promise.all([
-        api.get("/employees"),
-        api.get("/departments"),
-      ]);
+      const employeeResponse = await api.get("/employees");
 
       const employeeData =
         employeeResponse.data?.employees ??
         employeeResponse.data ??
         [];
 
-      const departmentData =
-        departmentResponse.data?.departments ??
-        departmentResponse.data ??
-        [];
-
       setEmployees(Array.isArray(employeeData) ? employeeData : []);
-      setDepartments(Array.isArray(departmentData) ? departmentData : []);
     } catch (err: any) {
       setError(
         err?.response?.data?.message ||
@@ -101,13 +85,9 @@ export default function Employees() {
   const openAdd = () => {
     setEditingEmployee(null);
 
-    const firstDepartment = departments.find(
-      (department) => department.status !== "Inactive"
-    );
-
     setForm({
       ...emptyForm,
-      department: firstDepartment?.name || "",
+      department: "Production",
     });
 
     setError("");
@@ -524,19 +504,9 @@ export default function Employees() {
                 >
                   <option value="">Select Department</option>
 
-                  {departments
-                    .filter(
-                      (department) =>
-                        department.status !== "Inactive"
-                    )
-                    .map((department) => (
-                      <option
-                        key={department._id}
-                        value={department.name}
-                      >
-                        {department.name}
-                      </option>
-                    ))}
+                  {["HR","Management","Finance","Maintenance","Production","QA / Quality","Stores","OQC"].map((department) => (
+                    <option key={department} value={department}>{department}</option>
+                  ))}
                 </select>
               </div>
 

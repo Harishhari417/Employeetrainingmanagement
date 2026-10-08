@@ -101,3 +101,91 @@ def reopen_feedback():
     result = db.feedback.update_one({"trainingId": payload.get("trainingId"), "employeeId": payload.get("employeeId")}, {"$set": {"status": "Draft"}, "$unset": {"submittedAt": ""}})
     db.training_participants.update_one({"trainingId": payload.get("trainingId"), "employeeId": payload.get("employeeId")}, {"$set": {"feedbackStatus": "Pending"}})
     return jsonify({"message": "Feedback reopened", "updated": result.modified_count > 0})
+
+
+@feedback_bp.get("/management")
+@jwt_required()
+def management_feedback_list():
+    claims = get_jwt()
+    role = claims.get("role")
+    if role not in {"HR_ADMIN", "MANAGER"}:
+        return jsonify({"message": "HR Admin or Manager permission required"}), 403
+
+    query = {}
+    if role == "MANAGER":
+        query["departments"] = claims.get("department")
+    trainings = list(db.trainings.find(query).sort("startDate", -1).limit(500))
+    reviewer_id = claims.get("employeeId")
+    records = {
+        row.get("trainingId"): row
+        for row in db.management_feedback.find({"reviewerId": reviewer_id})
+    }
+    result = []
+    for training in trainings:
+        tid = str(training["_id"])
+        record = records.get(tid, {})
+        result.append({
+            "_id": tid,
+            "title": training.get("title", ""),
+            "trainingType": training.get("trainingType", ""),
+            "trainerName": training.get("trainerName", ""),
+            "startDate": training.get("startDate", training.get("trainingDate")),
+            "endDate": training.get("endDate"),
+            "status": training.get("status", "Upcoming"),
+            "departments": training.get("departments", []),
+            "feedbackStatus": record.get("status", "Pending"),
+            "rating": record.get("rating", ""),
+            "remarks": record.get("remarks", ""),
+            "submittedAt": record.get("submittedAt"),
+        })
+    return jsonify(result)
+
+
+@feedback_bp.post("/management")
+@jwt_required()
+def save_management_feedback():
+    claims = get_jwt()
+    role = claims.get("role")
+    if role not in {"HR_ADMIN", "MANAGER"}:
+        return jsonify({"message": "HR Admin or Manager permission required"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    training_id = str(payload.get("trainingId", "")).strip()
+    rating = payload.get("rating")
+    remarks = str(payload.get("remarks", "")).strip()
+    try:
+        rating = int(rating)
+    except (TypeError, ValueError):
+        rating = 0
+
+    if not training_id or rating < 1 or rating > 5:
+        return jsonify({"message": "Training and a rating from 1 to 5 are required"}), 400
+
+    from bson import ObjectId
+    if not ObjectId.is_valid(training_id):
+        return jsonify({"message": "Invalid training"}), 400
+    training = db.trainings.find_one({"_id": ObjectId(training_id)})
+    if not training:
+        return jsonify({"message": "Training not found"}), 404
+
+    if role == "MANAGER" and claims.get("department") not in training.get("departments", []):
+        ids = [x.get("employeeId") for x in db.employees.find({"department": claims.get("department")}, {"employeeId": 1, "_id": 0})]
+        if not db.training_participants.count_documents({"trainingId": training_id, "employeeId": {"$in": ids}}):
+            return jsonify({"message": "This training is not assigned to your department"}), 403
+
+    now = datetime.now(timezone.utc)
+    db.management_feedback.update_one(
+        {"trainingId": training_id, "reviewerId": claims.get("employeeId")},
+        {"$set": {
+            "trainingId": training_id,
+            "reviewerId": claims.get("employeeId"),
+            "reviewerRole": role,
+            "rating": rating,
+            "remarks": remarks,
+            "status": "Submitted",
+            "submittedAt": now,
+            "updatedAt": now,
+        }},
+        upsert=True,
+    )
+    return jsonify({"message": "Overall training feedback submitted successfully"}), 200
