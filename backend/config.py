@@ -35,12 +35,8 @@ class Config:
     )
     ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "")
 
-    SMTP_HOST = os.getenv("SMTP_HOST", "")
-    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-    MAIL_FROM = os.getenv("MAIL_FROM", SMTP_USERNAME)
-    SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+    RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+    MAIL_FROM = os.getenv("MAIL_FROM", "")
 
     VERIFICATION_CODE_EXPIRES_MINUTES = int(os.getenv("VERIFICATION_CODE_EXPIRES_MINUTES", "10"))
     MONTHLY_REPORT_ENABLED = os.getenv("MONTHLY_REPORT_ENABLED", "true").lower() == "true"

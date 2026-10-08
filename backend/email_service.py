@@ -1,49 +1,77 @@
-
 import html
-import smtplib
-from email.message import EmailMessage
+import json
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from config import Config
 
 
 def _configured():
-    return bool(Config.SMTP_HOST and Config.SMTP_PORT and Config.SMTP_USERNAME and Config.SMTP_PASSWORD and Config.MAIL_FROM)
+    return bool(Config.RESEND_API_KEY and Config.MAIL_FROM)
 
 
 def send_email(to, subject, body, html_body=None, attachments=None):
     if not to or not _configured():
+        print("EMAIL ERROR: RESEND_API_KEY or MAIL_FROM is missing")
         return False
+
     recipients = [to] if isinstance(to, str) else [x for x in to if x]
     if not recipients:
+        print("EMAIL ERROR: no recipients")
         return False
-    message = EmailMessage()
-    message["From"] = Config.MAIL_FROM
-    message["To"] = ", ".join(recipients)
-    message["Subject"] = subject
-    message.set_content(body)
+
+    payload = {
+        "from": Config.MAIL_FROM,
+        "to": recipients,
+        "subject": subject,
+        "text": body,
+    }
     if html_body:
-        message.add_alternative(html_body, subtype="html")
-    for filename, content, mimetype in attachments or []:
-        maintype, subtype = mimetype.split("/", 1)
-        message.add_attachment(content, maintype=maintype, subtype=subtype, filename=filename)
+        payload["html"] = html_body
+
+    if attachments:
+        encoded = []
+        for filename, content, mimetype in attachments:
+            import base64
+            encoded.append({
+                "filename": filename,
+                "content": base64.b64encode(content).decode("ascii"),
+            })
+        payload["attachments"] = encoded
+
+    request = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {Config.RESEND_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "EmployeeTrainingPortal/1.0",
+        },
+        method="POST",
+    )
+
     try:
-        if Config.SMTP_USE_TLS:
-            with smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT, timeout=20) as server:
-                server.starttls()
-                server.login(Config.SMTP_USERNAME, Config.SMTP_PASSWORD)
-                server.send_message(message)
-        else:
-            with smtplib.SMTP_SSL(Config.SMTP_HOST, Config.SMTP_PORT, timeout=20) as server:
-                server.login(Config.SMTP_USERNAME, Config.SMTP_PASSWORD)
-                server.send_message(message)
-        return True
+        with urllib.request.urlopen(request, timeout=20) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            if response.status >= 200 and response.status < 300:
+                print("EMAIL SENT:", result.get("id", "unknown"))
+                return True
+            print("EMAIL ERROR: Resend returned", response.status, result)
+            return False
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read().decode("utf-8")
+        except Exception:
+            detail = str(exc)
+        print("EMAIL ERROR: Resend HTTP", exc.code, detail)
+        return False
     except Exception as exc:
-        print("EMAIL ERROR:", exc)
+        print("EMAIL ERROR: Resend connection", exc)
         return False
 
 
 def training_details_html(training):
-    esc=lambda v: html.escape(str(v or "—"))
+    esc = lambda v: html.escape(str(v or "—"))
     return f"""
     <div style="font-family:Arial,sans-serif;line-height:1.6;color:#1f2937">
       <h2>{esc(training.get("title"))}</h2>
@@ -143,18 +171,13 @@ def send_monthly_report(db, report_month=None):
         year, month = parsed_month.year, parsed_month.month
         month_label = report_month
     else:
-        year, month = now.year, now.month
-        month -= 1
+        year, month = now.year, now.month - 1
         if month == 0:
             month, year = 12, year - 1
         month_label = datetime(year, month, 1).strftime("%B %Y")
 
     start_dt = datetime(year, month, 1, tzinfo=timezone.utc)
-    if month == 12:
-        next_dt = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
-    else:
-        next_dt = datetime(year, month + 1, 1, tzinfo=timezone.utc)
-
+    next_dt = datetime(year + 1, 1, 1, tzinfo=timezone.utc) if month == 12 else datetime(year, month + 1, 1, tzinfo=timezone.utc)
     start_iso = start_dt.isoformat()
     next_iso = next_dt.isoformat()
 
@@ -191,4 +214,3 @@ def send_monthly_report(db, report_month=None):
     </div>
     """
     return send_email(recipients, subject, body, html_body)
-
