@@ -15,7 +15,6 @@ from routes.evaluations import evaluations_bp
 from routes.analytics import analytics_bp
 from routes.notifications import notifications_bp
 from routes.reports import reports_bp
-from scheduler import start_scheduler
 
 
 app = Flask(__name__)
@@ -59,7 +58,6 @@ app.register_blueprint(evaluations_bp)
 app.register_blueprint(analytics_bp)
 app.register_blueprint(notifications_bp)
 app.register_blueprint(reports_bp)
-start_scheduler()
 
 
 @app.route("/health")

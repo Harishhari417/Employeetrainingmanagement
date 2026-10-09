@@ -14,8 +14,7 @@ import {
   X,
   LogOut,
   Building2,
-  ClipboardList,
-  ChevronDown
+  ClipboardList
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import type { Role } from "../types";
@@ -90,7 +89,6 @@ const links: {
 
 export default function AppShell() {
   const [open, setOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
   const { user, logout } = useAuth();
 
   const visibleLinks = links.filter(
@@ -209,35 +207,17 @@ export default function AppShell() {
           <div className="ml-auto flex items-center gap-3">
             <NotificationBell />
 
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setProfileOpen((value) => !value)}
-                className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-slate-50"
-              >
-                <div className="hidden text-right sm:block">
-                  <p className="text-sm font-semibold text-slate-900">{user?.name}</p>
-                  <p className="text-xs text-slate-500">{user?.role?.replace("_", " / ")}</p>
-                </div>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 font-semibold text-indigo-700">
-                  {initials}
-                </div>
-                <ChevronDown size={16} className="text-slate-400" />
-              </button>
+            <div className="hidden text-right sm:block">
+              <p className="text-sm font-semibold text-slate-900">
+                {user?.name}
+              </p>
+              <p className="text-xs text-slate-500">
+                {user?.role?.replace("_", " / ")}
+              </p>
+            </div>
 
-              {profileOpen && (
-                <div className="absolute right-0 top-14 z-50 w-80 rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">My Profile</p>
-                  <h3 className="mt-2 text-lg font-bold text-slate-900">{user?.name || "User"}</h3>
-                  <div className="mt-4 space-y-3 text-sm">
-                    <div><p className="text-xs text-slate-400">Employee ID</p><p className="font-medium">{user?.employeeId || "—"}</p></div>
-                    <div><p className="text-xs text-slate-400">Login ID</p><p className="font-medium">{user?.username || "—"}</p></div>
-                    <div><p className="text-xs text-slate-400">Role</p><p className="font-medium">{user?.role?.replace("_", " / ") || "—"}</p></div>
-                    <div><p className="text-xs text-slate-400">Department</p><p className="font-medium">{user?.department || "—"}</p></div>
-                  </div>
-                  <button type="button" onClick={() => setProfileOpen(false)} className="mt-5 w-full rounded-xl border px-4 py-2 text-sm font-semibold">Close</button>
-                </div>
-              )}
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 font-semibold text-indigo-700">
+              {initials}
             </div>
           </div>
         </header>

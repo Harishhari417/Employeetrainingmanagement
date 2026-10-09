@@ -7,7 +7,6 @@ from flask_jwt_extended import get_jwt, jwt_required
 
 
 from db import db
-from email_service import send_training_assignment_email, send_training_admin_notification
 
 trainings_bp = Blueprint(
     "trainings",
@@ -116,8 +115,15 @@ def get_participant_ids(training_id):
 
 
 def sync_participants(training_id, employee_ids):
+    """
+    Makes the participant collection match employee_ids exactly:
+    - removes participants that are no longer assigned
+    - adds new ones (existing ones keep their attendance / progress)
+    - mirrors the list onto training.traineeIds
+    """
     existing_ids = set(get_participant_ids(training_id))
     wanted_ids = set(employee_ids)
+
     to_remove = existing_ids - wanted_ids
     to_add = [eid for eid in employee_ids if eid not in existing_ids]
 
@@ -147,12 +153,6 @@ def sync_participants(training_id, employee_ids):
         {"$set": {"traineeIds": employee_ids, "updatedAt": now_utc()}}
     )
 
-    training = trainings_collection.find_one({"_id": ObjectId(training_id)}) or {}
-    if to_add:
-        employees = employees_collection.find({"employeeId": {"$in": to_add}})
-        for employee in employees:
-            send_training_assignment_email(employee, training)
-        send_training_admin_notification(db, training, len(employee_ids))
 
 def filter_active_employee_ids(employee_ids):
     if not employee_ids:
@@ -288,6 +288,10 @@ def create_training():
             "message": "Internal trainer must be an employee."
         }), 400
 
+    try:
+        duration = int(data.get("durationMinutes", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({"message": "Invalid duration."}), 400
 
     departments = data.get("departments", [])
     if not isinstance(departments, list):
@@ -417,19 +421,11 @@ def update_training(training_id):
         return jsonify({"message": "Training not found."}), 404
 
     training = trainings_collection.find_one({"_id": object_id})
-    participant_ids = get_participant_ids(training_id)
-
-    # Notify assigned trainees whenever schedule or important training details change.
-    if participant_ids:
-        employees = employees_collection.find({"employeeId": {"$in": participant_ids}})
-        for employee in employees:
-            send_training_assignment_email(employee, training)
-        send_training_admin_notification(db, training, len(participant_ids))
 
     return jsonify({
         "message": "Training updated successfully.",
         "training": serialize_training(
-            training, participant_ids
+            training, get_participant_ids(training_id)
         )
     }), 200
 

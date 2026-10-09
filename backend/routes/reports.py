@@ -3,7 +3,6 @@ from flask import Blueprint, jsonify, Response, request
 from flask_jwt_extended import jwt_required, get_jwt
 from bson import ObjectId
 from db import db
-from email_service import send_monthly_report
 
 reports_bp = Blueprint("reports", __name__, url_prefix="/api/reports")
 
@@ -73,14 +72,3 @@ def trainee_trainer_report(training_id):
         rows.append({"Trainee ID":p.get("employeeId",""),"Trainee":e.get("name",""),"Department":e.get("department",""),"Designation":e.get("designation",""),"Trainer":trainer,"Trainer Employee ID":t.get("trainerEmployeeId",""),"Attendance":p.get("attendance","Pending"),"Feedback":p.get("feedbackStatus","Pending")})
     if request.args.get("format")=="csv": return csv_response(rows,"trainee-trainer-report.csv")
     return jsonify({"training":{"id":training_id,"title":t.get("title",""),"trainer":trainer},"rows":rows})
-
-
-@reports_bp.post("/monthly/email")
-@jwt_required()
-def email_monthly_report():
-    if get_jwt().get("role") != "HR_ADMIN":
-        return jsonify({"message": "HR Admin permission required"}), 403
-    ok = send_monthly_report(db)
-    if not ok:
-        return jsonify({"message": "Monthly report could not be emailed. Check SMTP and HR email settings."}), 503
-    return jsonify({"message": "Monthly report emailed to HR/Admin."}), 200

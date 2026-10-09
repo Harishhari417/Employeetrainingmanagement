@@ -13,7 +13,7 @@ class Config:
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
     JWT_ACCESS_TOKEN_EXPIRES = int(
-        os.getenv("JWT_ACCESS_TOKEN_EXPIRES", "7200")
+        os.getenv("JWT_ACCESS_TOKEN_EXPIRES", "86400")
     )
 
     # Frontend
@@ -33,12 +33,3 @@ class Config:
         "ADMIN_DEPARTMENT",
         "HR"
     )
-    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "")
-
-    RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-    MAIL_FROM = os.getenv("MAIL_FROM", "")
-
-    VERIFICATION_CODE_EXPIRES_MINUTES = int(os.getenv("VERIFICATION_CODE_EXPIRES_MINUTES", "10"))
-    MONTHLY_REPORT_ENABLED = os.getenv("MONTHLY_REPORT_ENABLED", "true").lower() == "true"
-    MONTHLY_REPORT_DAY = int(os.getenv("MONTHLY_REPORT_DAY", "1"))
-    MONTHLY_REPORT_HOUR = int(os.getenv("MONTHLY_REPORT_HOUR", "9"))
