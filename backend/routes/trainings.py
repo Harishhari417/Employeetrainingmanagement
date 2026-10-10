@@ -261,9 +261,15 @@ def get_trainings():
 @trainings_bp.route("", methods=["POST"])
 @jwt_required()
 def create_training():
-    if get_jwt().get("role") not in {"HR_ADMIN", "MANAGER"}:
-        return jsonify({"message": "Manager or HR Admin permission required."}), 403
+    claims = get_jwt()
+    if claims.get("role") not in {"HR_ADMIN", "MANAGER", "EMPLOYEE"}:
+        return jsonify({"message": "Permission required."}), 403
     data = request.get_json(silent=True) or {}
+    if claims.get("role") == "EMPLOYEE":
+        data["trainerEmployeeId"] = claims.get("employeeId")
+        employee = employees_collection.find_one({"employeeId": claims.get("employeeId")}) or {}
+        data["trainerName"] = employee.get("name", claims.get("employeeId"))
+        data["trainerCategory"] = "Internal"
 
     title = str(data.get("title", "")).strip()
     if not title:
@@ -515,6 +521,13 @@ def complete_training(training_id):
         return jsonify({
             "message": "A cancelled training cannot be completed."
         }), 400
+
+    participants = list(participants_collection.find({"trainingId": training_id}))
+    if not participants:
+        return jsonify({"message": "Training cannot be closed until participants are assigned and attendance and feedback are submitted."}), 400
+    incomplete = [p for p in participants if p.get("attendance") not in {"Present", "Absent", "Partial"} or p.get("feedbackStatus") != "Submitted"]
+    if incomplete:
+        return jsonify({"message": f"Training cannot be closed: {len(incomplete)} participant(s) still need attendance and feedback submitted."}), 400
 
     timestamp = now_utc()
 
