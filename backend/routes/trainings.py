@@ -173,26 +173,34 @@ def filter_active_employee_ids(employee_ids):
 
 
 # --------------------------------------------------------------------------
-# Trainings CRUD
+# Employee choices for trainer and trainee selectors
 # --------------------------------------------------------------------------
 
-@trainings_bp.route("/trainers", methods=["GET"])
+@trainings_bp.route("/eligible-trainees", methods=["GET"])
 @jwt_required()
-def search_trainers():
+def eligible_trainees():
     claims = get_jwt()
     query = {"status": {"$ne": "Inactive"}}
     if claims.get("role") == "MANAGER":
         query["department"] = claims.get("department")
-    term = request.args.get("search", "").strip()
-    if term:
-        query["$or"] = [
-            {"employeeId": {"$regex": term, "$options": "i"}},
-            {"name": {"$regex": term, "$options": "i"}},
-            {"department": {"$regex": term, "$options": "i"}},
-        ]
-    rows = employees_collection.find(query, {"_id": 0, "employeeId": 1, "name": 1, "department": 1, "designation": 1}).sort("name", 1).limit(100)
+    rows = employees_collection.find(query, {"_id": 0, "employeeId": 1, "name": 1, "employeeName": 1, "department": 1, "designation": 1, "status": 1}).sort("name", 1)
     return jsonify(list(rows)), 200
 
+
+@trainings_bp.route("/trainers", methods=["GET"])
+@jwt_required()
+def available_trainers():
+    claims = get_jwt()
+    query = {"status": {"$ne": "Inactive"}}
+    if claims.get("role") == "MANAGER":
+        query["department"] = claims.get("department")
+    rows = employees_collection.find(query, {"_id": 0, "employeeId": 1, "name": 1, "employeeName": 1, "department": 1, "designation": 1, "status": 1}).sort("name", 1)
+    return jsonify(list(rows)), 200
+
+
+# --------------------------------------------------------------------------
+# Trainings CRUD
+# --------------------------------------------------------------------------
 
 @trainings_bp.route("", methods=["GET"])
 @jwt_required()
@@ -204,13 +212,21 @@ def get_trainings():
 
     if role == "EMPLOYEE":
         assigned = participants_collection.distinct("trainingId", {"employeeId": employee_id})
-        valid_ids = [to_object_id(x) for x in assigned if to_object_id(x)]
-        query["_id"] = {"$in": valid_ids}
+        participant_ids = [to_object_id(x) for x in assigned if to_object_id(x)]
+        query["$or"] = [
+            {"_id": {"$in": participant_ids}},
+            {"trainerEmployeeId": employee_id},
+            {"createdByEmployeeId": employee_id},
+        ]
     elif role == "MANAGER":
         ids = [x.get("employeeId") for x in employees_collection.find({"department": claims.get("department")}, {"employeeId": 1, "_id": 0}) if x.get("employeeId")]
         assigned = participants_collection.distinct("trainingId", {"employeeId": {"$in": ids}})
         valid_ids = [to_object_id(x) for x in assigned if to_object_id(x)]
-        query["_id"] = {"$in": valid_ids}
+        query["$or"] = [
+            {"_id": {"$in": valid_ids}},
+            {"trainerEmployeeId": employee_id},
+            {"createdByEmployeeId": employee_id},
+        ]
 
     search = request.args.get("search", "").strip()
     training_type = request.args.get("trainingType", "").strip()
@@ -265,14 +281,13 @@ def get_trainings():
         )
         for training in trainings
     ]
-    if employee_id:
+    if role == "EMPLOYEE":
         participant_rows = {p.get("trainingId"): p for p in participants_collection.find({"employeeId": employee_id}, {"_id": 0, "trainingId": 1, "attendance": 1, "feedbackStatus": 1, "completionStatus": 1})}
         for row in result:
-            p = participant_rows.get(row["_id"])
-            row["myAssigned"] = bool(p)
-            row["myAttendance"] = (p or {}).get("attendance", "Pending")
-            row["myFeedbackStatus"] = (p or {}).get("feedbackStatus", "Pending")
-            row["myCompletionStatus"] = (p or {}).get("completionStatus", "Not Started")
+            p = participant_rows.get(row["_id"], {})
+            row["myAttendance"] = p.get("attendance", "Pending")
+            row["myFeedbackStatus"] = p.get("feedbackStatus", "Pending")
+            row["myCompletionStatus"] = p.get("completionStatus", "Not Started")
 
     return jsonify(result), 200
 
@@ -281,8 +296,9 @@ def get_trainings():
 @jwt_required()
 def create_training():
     claims = get_jwt()
-    if claims.get("role") not in {"HR_ADMIN", "MANAGER", "EMPLOYEE"}:
-        return jsonify({"message": "You do not have permission to create a training."}), 403
+    role = claims.get("role")
+    if role not in {"HR_ADMIN", "MANAGER", "EMPLOYEE"}:
+        return jsonify({"message": "You do not have permission to create training."}), 403
     data = request.get_json(silent=True) or {}
 
     title = str(data.get("title", "")).strip()
@@ -302,11 +318,19 @@ def create_training():
 
     trainer_category = data.get("trainerCategory", "Internal")
     trainer_employee_id = str(data.get("trainerEmployeeId", "") or "").strip()
-
-    if trainer_category == "Internal" and not trainer_employee_id:
-        return jsonify({
-            "message": "Internal trainer must be an employee."
-        }), 400
+    if role == "EMPLOYEE":
+        trainer_category = "Internal"
+        trainer_employee_id = str(claims.get("employeeId", "") or "").strip()
+        if not trainer_employee_id:
+            return jsonify({"message": "Your employee profile is missing; cannot assign you as trainer."}), 400
+        creator = employees_collection.find_one({"employeeId": trainer_employee_id}) or {}
+        trainer_name = creator.get("name") or creator.get("employeeName") or trainer_employee_id
+    else:
+        trainer_name = str(data.get("trainerName", "")).strip()
+        if trainer_category == "Internal" and not trainer_employee_id:
+            return jsonify({"message": "Internal trainer must be an employee."}), 400
+        if trainer_category == "Internal" and not employees_collection.find_one({"employeeId": trainer_employee_id}):
+            return jsonify({"message": "Selected trainer was not found."}), 400
 
     try:
         duration = int(data.get("durationMinutes", 0) or 0)
@@ -329,10 +353,10 @@ def create_training():
         "title": title,
         "content": str(data.get("content", "")).strip(),
         "trainingType": training_type,
-        "trainerName": str(data.get("trainerName", "")).strip(),
-        "trainerEmployeeId": (
-            trainer_employee_id if trainer_category == "Internal" else ""
-        ),
+        "trainerName": trainer_name if trainer_category == "Internal" else str(data.get("trainerName", "")).strip(),
+        "trainerEmployeeId": (trainer_employee_id if trainer_category == "Internal" else ""),
+        "createdByEmployeeId": str(claims.get("employeeId", "") or ""),
+        "createdByRole": role,
         "trainerCategory": trainer_category,
         "venue": str(data.get("venue", "")).strip(),
         "startDate": start_date,
@@ -349,16 +373,17 @@ def create_training():
     result = trainings_collection.insert_one(document)
     document["_id"] = result.inserted_id
 
-    if claims.get("role") == "EMPLOYEE":
-        trainee_ids = [str(claims.get("employeeId"))] if claims.get("employeeId") else []
-    else:
-        trainee_ids = filter_active_employee_ids(clean_id_list(data.get("traineeIds", [])))
-        if claims.get("role") == "MANAGER":
-            allowed = {x.get("employeeId") for x in employees_collection.find({"department": claims.get("department")}, {"employeeId": 1, "_id": 0})}
-            trainee_ids = [x for x in trainee_ids if x in allowed]
-    if trainee_ids:
-        sync_participants(str(result.inserted_id), trainee_ids)
-        document["traineeIds"] = trainee_ids
+    trainee_ids = filter_active_employee_ids(clean_id_list(data.get("traineeIds", [])))
+    if role == "EMPLOYEE":
+        trainee_ids = [eid for eid in trainee_ids if eid != claims.get("employeeId")]
+    if role == "MANAGER":
+        allowed = {x.get("employeeId") for x in employees_collection.find({"department": claims.get("department")}, {"employeeId": 1, "_id": 0}) if x.get("employeeId")}
+        trainee_ids = [eid for eid in trainee_ids if eid in allowed]
+    if not trainee_ids:
+        trainings_collection.delete_one({"_id": result.inserted_id})
+        return jsonify({"message": "Select at least one active trainee. Managers can assign trainees only within their department."}), 400
+    sync_participants(str(result.inserted_id), trainee_ids)
+    document["traineeIds"] = trainee_ids
 
     return jsonify({
         "message": "Training created successfully.",
@@ -480,8 +505,9 @@ def delete_training(training_id):
 @jwt_required()
 def update_participants(training_id):
     claims = get_jwt()
-    if claims.get("role") not in {"HR_ADMIN", "MANAGER"}:
-        return jsonify({"message": "Manager or HR Admin permission required."}), 403
+    role = claims.get("role")
+    if role not in {"HR_ADMIN", "MANAGER", "EMPLOYEE"}:
+        return jsonify({"message": "You do not have permission to assign trainees."}), 403
     object_id = to_object_id(training_id)
     if not object_id:
         return jsonify({"message": "Invalid training ID."}), 400
@@ -489,6 +515,8 @@ def update_participants(training_id):
     training = trainings_collection.find_one({"_id": object_id})
     if not training:
         return jsonify({"message": "Training not found."}), 404
+    if role == "EMPLOYEE" and not (training.get("createdByEmployeeId") == claims.get("employeeId") and training.get("trainerEmployeeId") == claims.get("employeeId")):
+        return jsonify({"message": "You can assign trainees only to a training you created as trainer."}), 403
 
     if training.get("status") in LOCKED_STATUSES:
         return jsonify({
@@ -503,9 +531,13 @@ def update_participants(training_id):
         return jsonify({"message": "employeeIds must be an array."}), 400
 
     valid_ids = filter_active_employee_ids(clean_id_list(raw_ids))
-    if claims.get("role") == "MANAGER":
+    if role == "MANAGER":
         allowed = {x.get("employeeId") for x in employees_collection.find({"department": claims.get("department")}, {"employeeId": 1, "_id": 0})}
         valid_ids = [x for x in valid_ids if x in allowed]
+    if role == "EMPLOYEE":
+        valid_ids = [x for x in valid_ids if x != claims.get("employeeId")]
+    if not valid_ids:
+        return jsonify({"message": "Select at least one active trainee."}), 400
 
     sync_participants(training_id, valid_ids)
 
@@ -538,18 +570,6 @@ def complete_training(training_id):
     if training.get("status") == "Cancelled":
         return jsonify({
             "message": "A cancelled training cannot be completed."
-        }), 400
-
-    participant_rows = list(participants_collection.find({"trainingId": training_id}))
-    if not participant_rows:
-        return jsonify({"message": "Assign at least one participant before completing this training."}), 400
-    pending_attendance = [p for p in participant_rows if p.get("attendance") not in {"Present", "Absent", "Partial"}]
-    pending_feedback = [p for p in participant_rows if p.get("attendance") in {"Present", "Partial"} and p.get("feedbackStatus") != "Submitted"]
-    if pending_attendance or pending_feedback:
-        return jsonify({
-            "message": "Training cannot be closed until attendance is marked for every participant and feedback is submitted by every present/partial attendee.",
-            "pendingAttendance": len(pending_attendance),
-            "pendingFeedback": len(pending_feedback)
         }), 400
 
     timestamp = now_utc()
