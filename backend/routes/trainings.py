@@ -176,6 +176,24 @@ def filter_active_employee_ids(employee_ids):
 # Trainings CRUD
 # --------------------------------------------------------------------------
 
+@trainings_bp.route("/trainers", methods=["GET"])
+@jwt_required()
+def search_trainers():
+    claims = get_jwt()
+    query = {"status": {"$ne": "Inactive"}}
+    if claims.get("role") == "MANAGER":
+        query["department"] = claims.get("department")
+    term = request.args.get("search", "").strip()
+    if term:
+        query["$or"] = [
+            {"employeeId": {"$regex": term, "$options": "i"}},
+            {"name": {"$regex": term, "$options": "i"}},
+            {"department": {"$regex": term, "$options": "i"}},
+        ]
+    rows = employees_collection.find(query, {"_id": 0, "employeeId": 1, "name": 1, "department": 1, "designation": 1}).sort("name", 1).limit(100)
+    return jsonify(list(rows)), 200
+
+
 @trainings_bp.route("", methods=["GET"])
 @jwt_required()
 def get_trainings():
@@ -247,13 +265,14 @@ def get_trainings():
         )
         for training in trainings
     ]
-    if role == "EMPLOYEE":
+    if employee_id:
         participant_rows = {p.get("trainingId"): p for p in participants_collection.find({"employeeId": employee_id}, {"_id": 0, "trainingId": 1, "attendance": 1, "feedbackStatus": 1, "completionStatus": 1})}
         for row in result:
-            p = participant_rows.get(row["_id"], {})
-            row["myAttendance"] = p.get("attendance", "Pending")
-            row["myFeedbackStatus"] = p.get("feedbackStatus", "Pending")
-            row["myCompletionStatus"] = p.get("completionStatus", "Not Started")
+            p = participant_rows.get(row["_id"])
+            row["myAssigned"] = bool(p)
+            row["myAttendance"] = (p or {}).get("attendance", "Pending")
+            row["myFeedbackStatus"] = (p or {}).get("feedbackStatus", "Pending")
+            row["myCompletionStatus"] = (p or {}).get("completionStatus", "Not Started")
 
     return jsonify(result), 200
 
@@ -263,13 +282,8 @@ def get_trainings():
 def create_training():
     claims = get_jwt()
     if claims.get("role") not in {"HR_ADMIN", "MANAGER", "EMPLOYEE"}:
-        return jsonify({"message": "Permission required."}), 403
+        return jsonify({"message": "You do not have permission to create a training."}), 403
     data = request.get_json(silent=True) or {}
-    if claims.get("role") == "EMPLOYEE":
-        data["trainerEmployeeId"] = claims.get("employeeId")
-        employee = employees_collection.find_one({"employeeId": claims.get("employeeId")}) or {}
-        data["trainerName"] = employee.get("name", claims.get("employeeId"))
-        data["trainerCategory"] = "Internal"
 
     title = str(data.get("title", "")).strip()
     if not title:
@@ -335,9 +349,13 @@ def create_training():
     result = trainings_collection.insert_one(document)
     document["_id"] = result.inserted_id
 
-    trainee_ids = filter_active_employee_ids(
-        clean_id_list(data.get("traineeIds", []))
-    )
+    if claims.get("role") == "EMPLOYEE":
+        trainee_ids = [str(claims.get("employeeId"))] if claims.get("employeeId") else []
+    else:
+        trainee_ids = filter_active_employee_ids(clean_id_list(data.get("traineeIds", [])))
+        if claims.get("role") == "MANAGER":
+            allowed = {x.get("employeeId") for x in employees_collection.find({"department": claims.get("department")}, {"employeeId": 1, "_id": 0})}
+            trainee_ids = [x for x in trainee_ids if x in allowed]
     if trainee_ids:
         sync_participants(str(result.inserted_id), trainee_ids)
         document["traineeIds"] = trainee_ids
@@ -522,12 +540,17 @@ def complete_training(training_id):
             "message": "A cancelled training cannot be completed."
         }), 400
 
-    participants = list(participants_collection.find({"trainingId": training_id}))
-    if not participants:
-        return jsonify({"message": "Training cannot be closed until participants are assigned and attendance and feedback are submitted."}), 400
-    incomplete = [p for p in participants if p.get("attendance") not in {"Present", "Absent", "Partial"} or p.get("feedbackStatus") != "Submitted"]
-    if incomplete:
-        return jsonify({"message": f"Training cannot be closed: {len(incomplete)} participant(s) still need attendance and feedback submitted."}), 400
+    participant_rows = list(participants_collection.find({"trainingId": training_id}))
+    if not participant_rows:
+        return jsonify({"message": "Assign at least one participant before completing this training."}), 400
+    pending_attendance = [p for p in participant_rows if p.get("attendance") not in {"Present", "Absent", "Partial"}]
+    pending_feedback = [p for p in participant_rows if p.get("attendance") in {"Present", "Partial"} and p.get("feedbackStatus") != "Submitted"]
+    if pending_attendance or pending_feedback:
+        return jsonify({
+            "message": "Training cannot be closed until attendance is marked for every participant and feedback is submitted by every present/partial attendee.",
+            "pendingAttendance": len(pending_attendance),
+            "pendingFeedback": len(pending_feedback)
+        }), 400
 
     timestamp = now_utc()
 

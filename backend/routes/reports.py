@@ -3,6 +3,8 @@ from flask import Blueprint, jsonify, Response, request
 from flask_jwt_extended import jwt_required, get_jwt
 from bson import ObjectId
 from db import db
+from datetime import datetime
+from openpyxl import Workbook
 
 reports_bp = Blueprint("reports", __name__, url_prefix="/api/reports")
 
@@ -74,88 +76,83 @@ def trainee_trainer_report(training_id):
     return jsonify({"training":{"id":training_id,"title":t.get("title",""),"trainer":trainer},"rows":rows})
 
 
+def workbook_response(sheets, filename):
+    book = Workbook()
+    book.remove(book.active)
+    for title, rows in sheets:
+        ws = book.create_sheet(title[:31])
+        fields = list(rows[0].keys()) if rows else ["No data"]
+        ws.append(fields)
+        for row in rows:
+            ws.append([str(row.get(field, "") if row.get(field) is not None else "") for field in fields])
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+        for column in ws.columns:
+            letter = column[0].column_letter
+            width = min(42, max(12, max((len(str(cell.value or "")) for cell in column), default=10) + 2))
+            ws.column_dimensions[letter].width = width
+    output = io.BytesIO()
+    book.save(output)
+    output.seek(0)
+    return Response(output.getvalue(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+def build_training_sheets(training):
+    training_id = str(training["_id"])
+    attendance_rows = []
+    feedback_rows = []
+    relation_rows = []
+    participants = list(db.training_participants.find({"trainingId": training_id}))
+    for participant in participants:
+        employee = db.employees.find_one({"employeeId": participant.get("employeeId")}, {"_id": 0, "name": 1, "department": 1}) or {}
+        common = {"Training": training.get("title", ""), "Training Type": training.get("trainingType", ""), "Trainer": training.get("trainerName", ""), "Trainer ID": training.get("trainerEmployeeId", ""), "Employee ID": participant.get("employeeId", ""), "Employee": employee.get("name", ""), "Department": employee.get("department", "")}
+        attendance_rows.append({**common, "Attendance": participant.get("attendance", "Pending"), "Attendance Updated": participant.get("attendanceUpdatedAt", "")})
+        relation_rows.append({**common, "Start Date": training.get("startDate", training.get("trainingDate", "")), "End Date": training.get("endDate", ""), "Assignment Scope": "Company-wide" if len(participants) > 1 and not training.get("departments") else ("Department" if training.get("departments") else ("One-to-one" if len(participants) == 1 else "Custom / selected")), "Completion": participant.get("completionStatus", "Not Started"), "Feedback Status": participant.get("feedbackStatus", "Pending")})
+        feedback = db.feedback.find_one({"trainingId": training_id, "employeeId": participant.get("employeeId")}, {"_id": 0}) or {}
+        if feedback:
+            ratings = feedback.get("ratings", {}) or {}
+            feedback_rows.append({**common, "Overall Rating": ratings.get("overall", ""), "Programme Design": ratings.get("Programme Design", ""), "Presentation": ratings.get("Presentation of Information", ""), "Information Amount": ratings.get("Amount of Information", ""), "Submitted At": feedback.get("submittedAt", ""), "Remarks": feedback.get("remarks", "")})
+    summary = [{"Training": training.get("title", ""), "Type": training.get("trainingType", ""), "Trainer": training.get("trainerName", ""), "Trainer ID": training.get("trainerEmployeeId", ""), "Start Date": training.get("startDate", training.get("trainingDate", "")), "End Date": training.get("endDate", ""), "Status": training.get("status", "Upcoming"), "Participants": len(participants), "Attendance Marked": sum(1 for x in participants if x.get("attendance") in {"Present", "Absent", "Partial"}), "Present": sum(1 for x in participants if x.get("attendance") == "Present"), "Feedback Responses": len(feedback_rows), "Assignment Scope": "Company-wide" if len(participants) > 1 and not training.get("departments") else ("Department" if training.get("departments") else ("One-to-one" if len(participants) == 1 else "Custom / selected"))}]
+    return [("Training Summary", summary), ("Attendance", attendance_rows), ("Feedback", feedback_rows), ("Trainee-Trainer", relation_rows)]
+
+
 @reports_bp.get("/training/<training_id>/excel")
 @jwt_required()
-def combined_training_excel(training_id):
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
-    from openpyxl.utils import get_column_letter
+def training_excel_report(training_id):
     claims = get_jwt()
     training = training_or_404(training_id)
     if not training or not allowed_training(claims, training):
         return jsonify({"message": "Training not found or access denied"}), 403
-    tid = training_id
-    wb = Workbook()
-    summary = wb.active
-    summary.title = "Training Summary"
-    summary.append(["Training", training.get("title", "")])
-    summary.append(["Trainer", training.get("trainerName", "")])
-    summary.append(["Trainer Employee ID", training.get("trainerEmployeeId", "")])
-    summary.append(["Start Date", str(training.get("startDate", training.get("trainingDate", "")))])
-    summary.append(["End Date", str(training.get("endDate", ""))])
-    summary.append(["Status", training.get("status", "Upcoming")])
-    attendance = wb.create_sheet("Attendance")
-    attendance.append(["Employee ID", "Employee", "Department", "Attendance", "Marked By", "Marked At"])
-    feedback_sheet = wb.create_sheet("Feedback")
-    feedback_sheet.append(["Employee ID", "Employee", "Department", "Overall Rating", "Status", "Submitted At", "Trainer", "Trainer Employee ID"])
-    trainee_trainer = wb.create_sheet("Trainee-Trainer")
-    trainee_trainer.append(["Trainee ID", "Trainee", "Department", "Designation", "Trainer", "Trainer Employee ID", "Attendance", "Feedback"])
-    for part in db.training_participants.find({"trainingId": tid}):
-        e = db.employees.find_one({"employeeId": part.get("employeeId")}, {"name": 1, "department": 1, "designation": 1, "_id": 0}) or {}
-        attendance.append([part.get("employeeId", ""), e.get("name", ""), e.get("department", ""), part.get("attendance", "Pending"), str(part.get("attendanceMarkedBy", "")), str(part.get("attendanceMarkedAt", ""))])
-        trainee_trainer.append([part.get("employeeId", ""), e.get("name", ""), e.get("department", ""), e.get("designation", ""), training.get("trainerName", ""), training.get("trainerEmployeeId", ""), part.get("attendance", "Pending"), part.get("feedbackStatus", "Pending")])
-    for f in db.feedback.find({"trainingId": tid}).sort("submittedAt", -1):
-        e = db.employees.find_one({"employeeId": f.get("employeeId")}, {"name": 1, "department": 1, "_id": 0}) or {}
-        feedback_sheet.append([f.get("employeeId", ""), e.get("name", ""), e.get("department", ""), f.get("ratings", {}).get("overall", ""), f.get("status", "Pending"), str(f.get("submittedAt", "")), training.get("trainerName", ""), training.get("trainerEmployeeId", "")])
-    for ws in wb.worksheets:
-        ws.freeze_panes = "A2"
-        for cell in ws[1]:
-            cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill("solid", fgColor="4338CA")
-            cell.alignment = Alignment(wrap_text=True)
-        for col in ws.columns:
-            letter = get_column_letter(col[0].column)
-            ws.column_dimensions[letter].width = min(34, max(14, max(len(str(c.value or "")) for c in col) + 2))
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return Response(output.getvalue(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=training-{training_id}-report.xlsx"})
+    safe = "".join(ch for ch in training.get("title", "training") if ch.isalnum() or ch in "-_")[:45] or "training"
+    return workbook_response(build_training_sheets(training), f"{safe}-report.xlsx")
 
 
 @reports_bp.get("/monthly/excel")
 @jwt_required()
-def monthly_training_excel():
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill
-    from openpyxl.utils import get_column_letter
+def monthly_excel_report():
     claims = get_jwt()
-    year = request.args.get("year", str(__import__("datetime").datetime.now().year))
-    month = request.args.get("month", "")
-    query = {}
+    year = request.args.get("year", str(datetime.now().year))
+    month = request.args.get("month", str(datetime.now().month))
+    try:
+        year, month = int(year), int(month)
+        if month < 1 or month > 12: raise ValueError()
+    except ValueError:
+        return jsonify({"message": "A valid year and month are required"}), 400
+    prefix = f"{year:04d}-{month:02d}"
+    query = {"startDate": {"$regex": "^" + prefix}}
+    trainings = list(db.trainings.find(query).sort("startDate", 1))
     if claims.get("role") == "MANAGER":
-        query["departments"] = claims.get("department")
-    rows = []
-    for t in db.trainings.find(query).sort("startDate", 1):
-        raw = str(t.get("startDate", t.get("trainingDate", "")))[:10]
-        if len(raw) < 7 or raw[:4] != year or (month and raw[5:7] != month.zfill(2)):
-            continue
-        tid = str(t["_id"])
-        participants = list(db.training_participants.find({"trainingId": tid}))
-        feedbacks = list(db.feedback.find({"trainingId": tid, "status": "Submitted"}))
-        present = sum(1 for p in participants if p.get("attendance") == "Present")
-        rows.append([raw[:7], t.get("title", ""), t.get("trainingType", ""), t.get("trainerName", ""), raw, str(t.get("endDate", ""))[:10], t.get("status", "Upcoming"), len(participants), present, round(present / len(participants) * 100, 1) if participants else 0, len(feedbacks), round(sum(float(f.get("ratings", {}).get("overall", 0) or 0) for f in feedbacks) / len(feedbacks), 2) if feedbacks else 0, "Company-wide" if not t.get("departments") else ", ".join(t.get("departments", [])), "One-to-one" if len(participants) == 1 else "Custom / Group" if t.get("traineeIds") else "Unassigned"])
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Monthly Overview"
-    ws.append(["Month", "Training", "Type", "Trainer", "Start", "End", "Status", "Assigned", "Present", "Attendance %", "Feedback Responses", "Average Feedback / 5", "Scope", "Assignment Type"])
-    for row in rows: ws.append(row)
-    for cell in ws[1]:
-        cell.font = Font(bold=True, color="FFFFFF")
-        cell.fill = PatternFill("solid", fgColor="4338CA")
-    ws.freeze_panes = "A2"
-    for col in ws.columns:
-        ws.column_dimensions[get_column_letter(col[0].column)].width = min(32, max(14, max(len(str(c.value or "")) for c in col) + 2))
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return Response(output.getvalue(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=training-monthly-report-{year}{('-'+month.zfill(2)) if month else ''}.xlsx"})
+        trainings = [t for t in trainings if claims.get("department") in t.get("departments", []) or db.training_participants.count_documents({"trainingId": str(t["_id"]), "employeeId": {"$in": [x.get("employeeId") for x in db.employees.find({"department": claims.get("department")}, {"employeeId": 1, "_id": 0})]}}) > 0]
+    elif claims.get("role") == "EMPLOYEE":
+        trainings = [t for t in trainings if t.get("trainerEmployeeId") == claims.get("employeeId") or db.training_participants.count_documents({"trainingId": str(t["_id"]), "employeeId": claims.get("employeeId")}) > 0]
+    sheets = [("Monthly Summary", [{"Month": prefix, "Trainings Scheduled": len(trainings), "Completed": sum(1 for t in trainings if t.get("status") == "Completed"), "Cancelled": sum(1 for t in trainings if t.get("status") == "Cancelled"), "Ongoing / Upcoming": sum(1 for t in trainings if t.get("status") not in {"Completed", "Cancelled"})}])]
+    summary_rows = []
+    for t in trainings:
+        p_rows = list(db.training_participants.find({"trainingId": str(t["_id"])}))
+        feedback_rows = list(db.feedback.find({"trainingId": str(t["_id"])}, {"ratings": 1, "_id": 0}))
+        ratings = [float(f.get("ratings", {}).get("overall")) for f in feedback_rows if isinstance(f.get("ratings", {}).get("overall"), (int, float))]
+        summary_rows.append({"Training": t.get("title", ""), "Type": t.get("trainingType", ""), "Trainer": t.get("trainerName", ""), "Trainer ID": t.get("trainerEmployeeId", ""), "Start Date": t.get("startDate", t.get("trainingDate", "")), "End Date": t.get("endDate", ""), "Status": t.get("status", "Upcoming"), "Scope": "Company-wide" if len(p_rows) > 1 and not t.get("departments") else ("Department" if t.get("departments") else ("One-to-one" if len(p_rows) == 1 else "Custom / selected")), "Participants": len(p_rows), "Present": sum(1 for x in p_rows if x.get("attendance") == "Present"), "Attendance Marked": sum(1 for x in p_rows if x.get("attendance") in {"Present", "Absent", "Partial"}), "Feedback Responses": len(feedback_rows), "Average Feedback": round(sum(ratings) / len(ratings), 2) if ratings else ""})
+        if allowed_training(claims, t):
+            sheets.extend(build_training_sheets(t)[1:])
+    sheets.insert(1, ("Training Details", summary_rows))
+    return workbook_response(sheets, f"training-report-{prefix}.xlsx")

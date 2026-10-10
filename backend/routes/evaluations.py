@@ -98,6 +98,10 @@ def update_evaluation(evaluation_id):
             except Exception:
                 return jsonify({"message": f"{field} must be between 1 and 5"}), 400
     if fields.get("status") == "Completed":
+        merged = {**existing, **fields}
+        missing_levels = [name for name in ("requiredLevel", "earlierLevel", "presentLevel") if merged.get(name) in (None, "")]
+        if missing_levels:
+            return jsonify({"message": "Complete required, earlier and present competency levels before closing the effectiveness evaluation.", "missingFields": missing_levels}), 400
         fields["completedAt"] = datetime.now(timezone.utc)
     if not fields:
         return jsonify({"message": "No fields to update"}), 400
