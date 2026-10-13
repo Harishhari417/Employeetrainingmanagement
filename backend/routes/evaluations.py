@@ -30,6 +30,8 @@ def sync_due_evaluations():
         except Exception:
             continue
         due = base + timedelta(days=90)
+        if due < datetime.now(timezone.utc):
+            db.effectiveness_evaluations.update_many({"trainingId": str(training["_id"]), "status": "Pending"}, {"$set": {"status": "Overdue"}})
         participants = db.training_participants.find({"trainingId": str(training["_id"])}, {"employeeId": 1})
         for participant in participants:
             employee_id = participant.get("employeeId")
@@ -98,10 +100,10 @@ def update_evaluation(evaluation_id):
             except Exception:
                 return jsonify({"message": f"{field} must be between 1 and 5"}), 400
     if fields.get("status") == "Completed":
-        merged = {**existing, **fields}
-        missing_levels = [name for name in ("requiredLevel", "earlierLevel", "presentLevel") if merged.get(name) in (None, "")]
-        if missing_levels:
-            return jsonify({"message": "Complete required, earlier and present competency levels before closing the effectiveness evaluation.", "missingFields": missing_levels}), 400
+        current = {**existing, **fields}
+        missing = [name for name in ("requiredLevel", "earlierLevel", "presentLevel") if not current.get(name)]
+        if missing:
+            return jsonify({"message": "Enter required, earlier and present competency levels before completing the evaluation."}), 400
         fields["completedAt"] = datetime.now(timezone.utc)
     if not fields:
         return jsonify({"message": "No fields to update"}), 400

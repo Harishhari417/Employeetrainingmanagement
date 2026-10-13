@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from bson import ObjectId
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt
 from db import db
@@ -23,12 +24,11 @@ def list_feedback():
     if request.args.get("trainingId"):
         query["trainingId"] = request.args["trainingId"]
     ids = visible_employee_ids(claims)
-    if claims.get("role") == "EMPLOYEE":
-        trained_ids = [str(x.get("_id")) for x in db.trainings.find({"trainerEmployeeId": claims.get("employeeId")}, {"_id": 1})]
-        query["$or"] = [{"employeeId": claims.get("employeeId")}, {"trainingId": {"$in": trained_ids}}]
-    elif claims.get("role") == "MANAGER":
-        trained_ids = [str(x.get("_id")) for x in db.trainings.find({"trainerEmployeeId": claims.get("employeeId")}, {"_id": 1})]
-        query["$or"] = [{"employeeId": {"$in": ids or []}}, {"trainingId": {"$in": trained_ids}}]
+    # A trainer sees responses for their own trainings; trainees still see their own.
+    if claims.get("role") in {"EMPLOYEE", "MANAGER"}:
+        trainer_training_ids = [str(x["_id"]) for x in db.trainings.find({"trainerEmployeeId": claims.get("employeeId")}, {"_id": 1})]
+        own_employee_ids = ids or [claims.get("employeeId")]
+        query["$or"] = [{"employeeId": {"$in": own_employee_ids}}, {"trainerEmployeeId": claims.get("employeeId")}, {"trainingId": {"$in": trainer_training_ids}}]
     records = list(db.feedback.find(query, {"_id": 0}).sort("submittedAt", -1).limit(1000))
     for row in records:
         employee = db.employees.find_one({"employeeId": row.get("employeeId")}, {"name": 1, "department": 1, "_id": 0}) or {}
@@ -41,11 +41,11 @@ def list_feedback():
             training = {}
         row["trainingTitle"] = training.get("title", "")
         row["trainerEmployeeId"] = ""
+        row["trainerName"] = ""
         try:
-            from bson import ObjectId
-            tr = db.trainings.find_one({"_id": ObjectId(row.get("trainingId"))}, {"trainerEmployeeId": 1, "trainerName": 1, "_id": 0}) or {}
-            row["trainerEmployeeId"] = tr.get("trainerEmployeeId", "")
-            row["trainerName"] = tr.get("trainerName", "")
+            training_doc = db.trainings.find_one({"_id": ObjectId(row.get("trainingId"))}, {"trainerEmployeeId": 1, "trainerName": 1}) or {}
+            row["trainerEmployeeId"] = training_doc.get("trainerEmployeeId", "")
+            row["trainerName"] = training_doc.get("trainerName", "")
         except Exception:
             pass
     return jsonify(records)
@@ -66,6 +66,10 @@ def save_feedback(payload, claims, existing=None):
         return jsonify({"message": "Absent participants cannot submit feedback"}), 400
     data = dict(payload)
     data["employeeId"] = employee_id
+    training = db.trainings.find_one({"_id": ObjectId(payload.get("trainingId"))}) if ObjectId.is_valid(str(payload.get("trainingId", ""))) else None
+    if training:
+        data["trainerEmployeeId"] = training.get("trainerEmployeeId", "")
+        data["trainerName"] = training.get("trainerName", "")
     data["status"] = "Submitted"
     data["submittedAt"] = datetime.now(timezone.utc)
     db.feedback.update_one({"trainingId": data["trainingId"], "employeeId": employee_id}, {"$set": data}, upsert=True)
