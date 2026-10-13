@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { LockKeyhole, LogIn, UserPlus, UserRound } from "lucide-react";
 import LogoPlaceholder from "../components/LogoPlaceholder";
+import CompanyFooter from "../components/CompanyFooter";
 import { useAuth } from "../auth/AuthContext";
 import { api } from "../services/api";
 
@@ -44,8 +45,8 @@ export default function Login() {
     } finally { setSubmitting(false); }
   }
 
-  return <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
-    <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-5xl items-center gap-8 lg:grid-cols-2">
+  return <main className="flex min-h-screen flex-col bg-slate-50">
+    <div className="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-5xl flex-1 items-center gap-8 px-4 py-8 sm:px-6 lg:px-8 lg:grid-cols-2">
       <section className="hidden lg:block">
         <div className="mb-6 flex items-center gap-3"><LogoPlaceholder/><div><p className="font-bold">Training Management</p><p className="text-sm text-slate-500">Employee Training & Effectiveness Portal</p></div></div>
         <h1 className="text-4xl font-bold tracking-tight">One place for training, attendance and feedback.</h1>
@@ -82,5 +83,6 @@ export default function Login() {
         </form>}
       </section>
     </div>
+    <CompanyFooter />
   </main>;
 }

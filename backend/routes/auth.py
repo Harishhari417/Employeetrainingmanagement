@@ -140,9 +140,13 @@ def login():
         },
     )
 
+    user_data = serialize_user(user)
+    employee = db.employees.find_one({"employeeId": user.get("employeeId")}) or {}
+    user_data["email"] = employee.get("email") or user.get("email") or ""
+    user_data["designation"] = employee.get("designation") or user.get("designation") or ""
     return jsonify({
         "accessToken": token,
-        "user": serialize_user(user),
+        "user": user_data,
     })
 
 
@@ -159,7 +163,11 @@ def me():
     if not user:
         return jsonify({"message": "User not found"}), 404
 
-    return jsonify(serialize_user(user))
+    user_data = serialize_user(user)
+    employee = db.employees.find_one({"employeeId": user.get("employeeId")}) or {}
+    user_data["email"] = employee.get("email") or user.get("email") or ""
+    user_data["designation"] = employee.get("designation") or user.get("designation") or ""
+    return jsonify(user_data)
 
 
 @auth_bp.put("/password")

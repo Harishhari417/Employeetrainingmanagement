@@ -1,5 +1,6 @@
 
 import NotificationBell from "./NotificationBell";
+import CompanyFooter from "./CompanyFooter";
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
@@ -14,7 +15,12 @@ import {
   X,
   LogOut,
   Building2,
-  ClipboardList
+  ClipboardList,
+  ChevronDown,
+  UserRound,
+  Mail,
+  Building2 as BuildingIcon,
+  BadgeCheck
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import type { Role } from "../types";
@@ -89,6 +95,7 @@ const links: {
 
 export default function AppShell() {
   const [open, setOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const { user, logout } = useAuth();
 
   const visibleLinks = links.filter(
@@ -175,7 +182,7 @@ export default function AppShell() {
         </div>
       </aside>
 
-      <div className="lg:pl-72">
+      <div className="flex min-h-screen flex-col lg:pl-72">
         <header className="sticky top-0 z-20 flex h-20 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <button
@@ -207,24 +214,34 @@ export default function AppShell() {
           <div className="ml-auto flex items-center gap-3">
             <NotificationBell />
 
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold text-slate-900">
-                {user?.name}
-              </p>
-              <p className="text-xs text-slate-500">
-                {user?.role?.replace("_", " / ")}
-              </p>
-            </div>
-
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 font-semibold text-indigo-700">
-              {initials}
+            <div className="relative">
+              <button type="button" aria-label="View profile details" aria-expanded={profileOpen} onClick={() => setProfileOpen((value) => !value)} className="flex items-center gap-2 rounded-xl p-1.5 text-left hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100 font-semibold text-indigo-700">{initials}</span>
+                <span className="hidden max-w-40 sm:block"><span className="block truncate text-sm font-semibold text-slate-900">{user?.name || "User"}</span><span className="block text-xs text-slate-500">{user?.role?.replace("_", " / ")}</span></span>
+                <ChevronDown size={15} className="hidden text-slate-500 sm:block" />
+              </button>
+              {profileOpen && <>
+                <button aria-label="Close profile details" className="fixed inset-0 z-30 cursor-default" onClick={() => setProfileOpen(false)} />
+                <div className="absolute right-0 z-40 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+                  <div className="flex items-center gap-3 border-b border-slate-100 pb-3"><span className="flex h-11 w-11 items-center justify-center rounded-full bg-indigo-100 font-semibold text-indigo-700">{initials}</span><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-900">{user?.name || "User"}</p><p className="text-xs text-slate-500">{user?.role?.replace("_", " / ")}</p></div></div>
+                  <div className="space-y-3 pt-3 text-sm text-slate-600">
+                    <p className="flex items-start gap-2"><UserRound size={16} className="mt-0.5 shrink-0 text-slate-400"/><span><span className="block text-xs text-slate-400">Employee / login ID</span>{user?.employeeId || user?.username || "Not available"}</span></p>
+                    {user?.email && <p className="flex items-start gap-2"><Mail size={16} className="mt-0.5 shrink-0 text-slate-400"/><span className="min-w-0"><span className="block text-xs text-slate-400">Email</span><span className="break-all">{user.email}</span></span></p>}
+                    <p className="flex items-start gap-2"><BuildingIcon size={16} className="mt-0.5 shrink-0 text-slate-400"/><span><span className="block text-xs text-slate-400">Department</span>{user?.department || "Not available"}</span></p>
+                    {user?.designation && <p className="flex items-start gap-2"><BadgeCheck size={16} className="mt-0.5 shrink-0 text-slate-400"/><span><span className="block text-xs text-slate-400">Designation</span>{user.designation}</span></p>}
+                    <p className="flex items-start gap-2"><BadgeCheck size={16} className="mt-0.5 shrink-0 text-slate-400"/><span><span className="block text-xs text-slate-400">Account role</span>{user?.role || "Not available"}</span></p>
+                  </div>
+                  <button onClick={() => { setProfileOpen(false); logout(); }} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"><LogOut size={16}/> Sign out</button>
+                </div>
+              </>}
             </div>
           </div>
         </header>
 
-        <main className="p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
+        <CompanyFooter />
       </div>
     </div>
   );

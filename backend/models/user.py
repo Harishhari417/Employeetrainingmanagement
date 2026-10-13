@@ -14,6 +14,8 @@ def serialize_user(doc):
         "role": doc["role"],
         "employeeId": doc.get("employeeId"),
         "department": doc.get("department"),
+        "email": doc.get("email"),
+        "designation": doc.get("designation"),
     }
 
 
@@ -26,6 +28,8 @@ def build_user(username, name, password, role, employee_id=None, department=None
         "role": role,
         "employeeId": employee_id,
         "department": department,
+        "email": "",
+        "designation": "",
         "createdAt": now,
         "updatedAt": now,
     }

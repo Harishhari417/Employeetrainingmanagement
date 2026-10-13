@@ -176,10 +176,32 @@ def filter_active_employee_ids(employee_ids):
 @trainings_bp.get("/employee-options")
 @jwt_required()
 def employee_options():
+    """Return only safe employee fields needed for trainer/trainee search."""
+    projection = {
+        "_id": 0,
+        "employeeId": 1,
+        "name": 1,
+        "employeeName": 1,
+        "fullName": 1,
+        "department": 1,
+        "designation": 1,
+        "status": 1,
+    }
     rows = []
-    for employee in employees_collection.find({}, {"_id": 0, "employeeId": 1, "name": 1, "employeeName": 1, "department": 1, "designation": 1, "status": 1}).sort("name", 1):
-        if employee_is_active(employee) and employee.get("employeeId"):
-            rows.append(employee)
+    for employee in employees_collection.find({}, projection):
+        employee_id = str(employee.get("employeeId") or employee.get("employee_id") or "").strip()
+        if not employee_id or not employee_is_active(employee):
+            continue
+        name = str(employee.get("name") or employee.get("employeeName") or employee.get("fullName") or employee_id).strip()
+        rows.append({
+            "employeeId": employee_id,
+            "name": name,
+            "employeeName": name,
+            "department": str(employee.get("department") or "").strip(),
+            "designation": str(employee.get("designation") or "").strip(),
+            "status": str(employee.get("status") or "Active").strip(),
+        })
+    rows.sort(key=lambda row: (row["name"].lower(), row["employeeId"].lower()))
     return jsonify(rows), 200
 
 

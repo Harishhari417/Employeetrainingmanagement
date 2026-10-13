@@ -17,6 +17,8 @@ export interface AuthUser {
   role: Role;
   employeeId?: string | null;
   department?: string | null;
+  email?: string | null;
+  designation?: string | null;
 }
 
 type AuthContextValue = {
