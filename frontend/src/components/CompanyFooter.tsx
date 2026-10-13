@@ -31,7 +31,6 @@ export default function CompanyFooter() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Address &amp; location</p>
           <p className="mt-2 flex items-start gap-2 text-sm leading-6 text-slate-600"><MapPin size={16} className="mt-1 shrink-0"/><span>{company.address}</span></p>
-          <p className="mt-1 pl-6 text-sm leading-6 text-slate-600">{company.location}</p>
           {company.email && <a href={`mailto:${company.email}`} className="mt-2 inline-flex items-center gap-2 text-sm text-indigo-700 hover:underline"><Mail size={15}/>{company.email}</a>}
         </div>
         <div>
