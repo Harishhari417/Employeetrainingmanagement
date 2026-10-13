@@ -50,7 +50,7 @@ export default function Login() {
       <section className="hidden lg:block">
         <div className="mb-6 flex items-center gap-3"><LogoPlaceholder/><div><p className="font-bold">Training Management</p><p className="text-sm text-slate-500">Employee Training & Effectiveness Portal</p></div></div>
         <h1 className="text-4xl font-bold tracking-tight">One place for training, attendance and feedback.</h1>
-        <p className="mt-4 max-w-xl text-slate-600">Employees can register with their complete profile, HR can create employee accounts, and training progress is shared across employee, manager and HR dashboards.</p>
+        <p className="mt-4 max-w-xl text-slate-600"></p>
         <div className="mt-8 grid grid-cols-2 gap-4">{["Employee signup","Training planning","Live progress","Attendance & feedback"].map(item=><div key={item} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-sm font-semibold">{item}</p></div>)}</div>
       </section>
 

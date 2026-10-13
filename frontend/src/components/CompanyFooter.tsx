@@ -1,10 +1,9 @@
-import { Facebook, Instagram, Linkedin, MapPin, Globe, Mail } from "lucide-react";
+import { Facebook, Instagram, Linkedin, MapPin, Globe, Mail, Youtube } from "lucide-react";
 
 // Replace these defaults with the company's confirmed contact details and official social URLs.
 const company = {
   name: import.meta.env.VITE_COMPANY_NAME || "EVIG Integration",
-  address: import.meta.env.VITE_COMPANY_ADDRESS || "Company address to be configured",
-  location: import.meta.env.VITE_COMPANY_LOCATION || "Company location to be configured",
+  address: import.meta.env.VITE_COMPANY_ADDRESS || "EVIG Integration Private Limited Plot No. 86, Unit 2, KIADB Industrial Area, Malur, Kolar District, Karnataka 563 130, India",
   email: import.meta.env.VITE_COMPANY_EMAIL || "",
   website: import.meta.env.VITE_COMPANY_WEBSITE || "",
   linkedin: import.meta.env.VITE_COMPANY_LINKEDIN || "",
@@ -13,10 +12,11 @@ const company = {
 };
 
 const socials = [
-  { label: "LinkedIn", href: company.linkedin, Icon: Linkedin },
-  { label: "Facebook", href: company.facebook, Icon: Facebook },
-  { label: "Instagram", href: company.instagram, Icon: Instagram },
-  { label: "Website", href: company.website, Icon: Globe },
+  { label: "LinkedIn", href: "https://www.linkedin.com/company/evig-integration/", Icon: Linkedin },
+  { label: "Facebook", href: "https://www.facebook.com/evigintegration", Icon: Facebook },
+  { label: "Instagram", href: "https://instagram.com/evigintegration?igshid=MzRlODBiNWFlZA==", Icon: Instagram },
+  { label: "YouTube", href: "https://www.youtube.com/@evigintegration/channels", Icon: Youtube },
+  { label: "Website", href: "https://evigintegration.com/", Icon: Globe },
 ].filter((item) => item.href);
 
 export default function CompanyFooter() {
