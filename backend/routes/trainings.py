@@ -510,19 +510,45 @@ def update_training(training_id):
 @trainings_bp.route("/<training_id>", methods=["DELETE"])
 @jwt_required()
 def delete_training(training_id):
-    if get_jwt().get("role") not in {"HR_ADMIN", "MANAGER"}:
-        return jsonify({"message": "Manager or HR Admin permission required."}), 403
+    claims = get_jwt()
+    role = claims.get("role")
     object_id = to_object_id(training_id)
     if not object_id:
         return jsonify({"message": "Invalid training ID."}), 400
 
-    result = trainings_collection.delete_one({"_id": object_id})
-    if result.deleted_count == 0:
+    training = trainings_collection.find_one({"_id": object_id})
+    if not training:
         return jsonify({"message": "Training not found."}), 404
 
-    participants_collection.delete_many({"trainingId": training_id})
+    # HR can remove any training. Managers can remove trainings connected to
+    # their department. An employee-trainer can remove only a training they created.
+    if role == "HR_ADMIN":
+        allowed = True
+    elif role == "MANAGER":
+        department = claims.get("department")
+        assigned_ids = [row.get("employeeId") for row in employees_collection.find(
+            {"department": department}, {"employeeId": 1, "_id": 0}
+        ) if row.get("employeeId")]
+        assigned_to_department = bool(participants_collection.find_one({
+            "trainingId": training_id, "employeeId": {"$in": assigned_ids}
+        }))
+        allowed = department in (training.get("departments") or []) or assigned_to_department
+    elif role == "EMPLOYEE":
+        allowed = training.get("trainerEmployeeId") == claims.get("employeeId")
+    else:
+        allowed = False
 
-    return jsonify({"message": "Training deleted successfully."}), 200
+    if not allowed:
+        return jsonify({"message": "You do not have permission to delete this training."}), 403
+
+    # Remove the training and its dependent records so it is fully removed from the portal.
+    trainings_collection.delete_one({"_id": object_id})
+    participants_collection.delete_many({"trainingId": training_id})
+    db.feedback.delete_many({"trainingId": training_id})
+    db.notifications.delete_many({"trainingId": training_id})
+    db.evaluations.delete_many({"trainingId": training_id})
+
+    return jsonify({"message": "Training and its related attendance, feedback, notifications, and evaluation records were deleted."}), 200
 
 
 # --------------------------------------------------------------------------

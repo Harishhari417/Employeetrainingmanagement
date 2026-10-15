@@ -16,6 +16,7 @@ def build_employee(payload):
         "designation": payload.get("designation", "").strip(),
         "reportingManager": payload.get("reportingManager", "").strip(),
         "email": payload.get("email", "").strip(),
+        "mobile": "".join(ch for ch in str(payload.get("mobile", "")) if ch.isdigit()),
         "status": payload.get("status", "Active"),
         "createdAt": now,
         "updatedAt": now,

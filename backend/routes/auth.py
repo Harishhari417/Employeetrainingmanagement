@@ -65,7 +65,7 @@ def ensure_admin_user():
 @auth_bp.post("/signup")
 def signup():
     payload = request.get_json(silent=True) or {}
-    required = ["employeeId", "name", "email", "password", "department", "designation", "role"]
+    required = ["employeeId", "name", "email", "mobile", "password", "department", "designation", "role"]
     missing = [field for field in required if not str(payload.get(field, "")).strip()]
     if missing:
         return jsonify({"message": "Please fill all required fields", "fields": missing}), 400
@@ -73,6 +73,9 @@ def signup():
     employee_id = str(payload["employeeId"]).strip().upper()
     name = str(payload["name"]).strip()
     email = str(payload["email"]).strip().lower()
+    mobile = "".join(ch for ch in str(payload.get("mobile", "")) if ch.isdigit())
+    if len(mobile) < 10:
+        return jsonify({"message": "Please enter a valid mobile number with at least 10 digits"}), 400
     password = str(payload["password"])
     department = str(payload["department"]).strip()
     designation = str(payload["designation"]).strip()
@@ -95,7 +98,7 @@ def signup():
     employee = {
         "employeeId": employee_id, "name": name, "department": department,
         "designation": designation, "reportingManager": str(payload.get("reportingManager", "")).strip(),
-        "email": email, "status": "Active", "createdAt": now, "updatedAt": now,
+        "email": email, "mobile": mobile, "status": "Active", "createdAt": now, "updatedAt": now,
         "registeredBy": "SELF", "accountRole": role,
     }
     user = build_user(employee_id, name, password, role, employee_id, department)
@@ -201,6 +204,53 @@ def change_password():
         },
     )
     return jsonify({"message": "Password changed successfully. Please sign in again."})
+
+
+@auth_bp.post("/password/forgot")
+def forgot_password():
+    """Reset a password after matching the employee ID and registered mobile.
+
+    This flow intentionally sends no email or OTP. It requires both identifiers
+    to match the employee record; accounts without a registered mobile must be
+    updated by an administrator before this recovery method can be used.
+    """
+    payload = request.get_json(silent=True) or {}
+    employee_id = str(payload.get("employeeId", "")).strip().upper()
+    mobile = "".join(ch for ch in str(payload.get("mobile", "")) if ch.isdigit())
+    new_password = str(payload.get("newPassword", ""))
+
+    if not employee_id or not mobile or not new_password:
+        return jsonify({"message": "Employee ID, registered mobile number, and new password are required"}), 400
+    if len(new_password) < 8:
+        return jsonify({"message": "New password must be at least 8 characters"}), 400
+
+    employee = db.employees.find_one({"employeeId": employee_id})
+    if not employee:
+        return jsonify({"message": "Employee ID or registered mobile number does not match"}), 400
+
+    stored_mobile = ""
+    for field in ("mobile", "mobileNumber", "phone", "phoneNumber", "contactNumber"):
+        value = employee.get(field)
+        if value:
+            stored_mobile = "".join(ch for ch in str(value) if ch.isdigit())
+            if stored_mobile:
+                break
+
+    if not stored_mobile or stored_mobile != mobile:
+        return jsonify({"message": "Employee ID or registered mobile number does not match. Contact HR if your mobile number is not registered."}), 400
+
+    user = db.users.find_one({"username": employee_id.lower()})
+    if not user:
+        return jsonify({"message": "No login account was found for this employee"}), 404
+
+    db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "passwordHash": generate_password_hash(new_password),
+            "updatedAt": datetime.now(timezone.utc),
+        }},
+    )
+    return jsonify({"message": "Password reset successfully. You can now sign in with your new password."}), 200
 
 
 @auth_bp.post("/logout")
