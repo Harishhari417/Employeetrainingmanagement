@@ -82,10 +82,12 @@ def save_feedback(payload, claims, existing=None):
 def create_feedback():
     claims = get_jwt()
     payload = request.get_json(silent=True) or {}
-    required = ["trainingId", "employeeId", "ratings"]
+    required = ["trainingId", "employeeId", "ratings", "knowledgeBefore", "knowledgeAfter", "bestModule", "missedModule", "majorLearning", "ideasToImplement", "remarks"]
     missing = [field for field in required if payload.get(field) in (None, "", {})]
-    if missing:
-        return jsonify({"message": "Missing required fields", "fields": missing}), 400
+    rating_keys = ["Programme Design", "Presentation of Information", "Amount of Information", "Administrative arrangements", "overall"]
+    missing_ratings = [key for key in rating_keys if not (payload.get("ratings") or {}).get(key)]
+    if missing or missing_ratings:
+        return jsonify({"message": "Complete every required feedback field", "fields": missing + missing_ratings}), 400
     return save_feedback(payload, claims)
 
 
@@ -94,10 +96,12 @@ def create_feedback():
 def edit_feedback():
     claims = get_jwt()
     payload = request.get_json(silent=True) or {}
-    required = ["trainingId", "employeeId", "ratings"]
+    required = ["trainingId", "employeeId", "ratings", "knowledgeBefore", "knowledgeAfter", "bestModule", "missedModule", "majorLearning", "ideasToImplement", "remarks"]
     missing = [field for field in required if payload.get(field) in (None, "", {})]
-    if missing:
-        return jsonify({"message": "Missing required fields", "fields": missing}), 400
+    rating_keys = ["Programme Design", "Presentation of Information", "Amount of Information", "Administrative arrangements", "overall"]
+    missing_ratings = [key for key in rating_keys if not (payload.get("ratings") or {}).get(key)]
+    if missing or missing_ratings:
+        return jsonify({"message": "Complete every required feedback field", "fields": missing + missing_ratings}), 400
     existing = db.feedback.find_one({"trainingId": payload.get("trainingId"), "employeeId": payload.get("employeeId")})
     if not existing:
         return jsonify({"message": "Feedback not found"}), 404

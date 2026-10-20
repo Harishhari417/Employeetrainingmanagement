@@ -27,6 +27,8 @@ export default function App() {
           <Route path="/employee" element={<ProtectedRoute roles={["EMPLOYEE"]} />}><Route index element={<Dashboard />} /></Route>
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/feedback" element={<Feedback />} />
+          <Route path="/feedback/add" element={<Feedback />} />
+          <Route path="/feedback/view" element={<Feedback />} />
           <Route path="/trainings" element={<Trainings />} />
           <Route path="/evaluations" element={<Evaluations />} />
 

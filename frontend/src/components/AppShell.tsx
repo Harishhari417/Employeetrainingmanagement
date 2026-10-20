@@ -50,9 +50,15 @@ const links: {
     roles: ["HR_ADMIN", "MANAGER", "EMPLOYEE"]
   },
   {
-    to: "/feedback",
-    label: "Feedback",
+    to: "/feedback/add",
+    label: "Add Feedback",
     icon: FileText,
+    roles: ["HR_ADMIN", "MANAGER", "EMPLOYEE"]
+  },
+  {
+    to: "/feedback/view",
+    label: "View Feedback",
+    icon: ClipboardList,
     roles: ["HR_ADMIN", "MANAGER", "EMPLOYEE"]
   },
   {
