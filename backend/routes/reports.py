@@ -108,7 +108,7 @@ def combined_training_report(training_id):
 @reports_bp.get("/monthly.xlsx")
 @jwt_required()
 def monthly_report():
-    claims=get_jwt(); year=request.args.get("year",str(datetime.now().year))
+    claims=get_jwt(); year=request.args.get("year",str(datetime.now().year)); month_filter=request.args.get("month", "all")
     try: year=int(year)
     except ValueError: return jsonify({"message":"Year must be numeric"}),400
     query={}
@@ -123,6 +123,10 @@ def monthly_report():
         try: dt=datetime.fromisoformat(text_date.replace("Z","+00:00")); month=dt.month
         except Exception: continue
         if dt.year!=year: continue
+        if month_filter != "all":
+            try:
+                if dt.month != int(month_filter): continue
+            except ValueError: return jsonify({"message":"Month must be 1-12 or all"}),400
         tid=str(t["_id"]); participants=list(db.training_participants.find({"trainingId":tid})); total=len(participants)
         status=t.get("status","Upcoming")
         if status not in {"Completed","Cancelled"}:

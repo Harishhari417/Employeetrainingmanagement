@@ -32,7 +32,7 @@ def analytics():
     claims = get_jwt(); role = claims.get("role")
     training_id = request.args.get("trainingId", "").strip(); start = request.args.get("startDate", "").strip(); end = request.args.get("endDate", "").strip()
     period = request.args.get("period", "month").lower()
-    if period not in {"day", "month", "year"}: period = "month"
+    if period not in {"day", "week", "month", "year"}: period = "month"
     employee_ids = None
     if role == "EMPLOYEE": employee_ids = [claims.get("employeeId")]
     elif role == "MANAGER": employee_ids = [x.get("employeeId") for x in db.employees.find({"department": claims.get("department")}, {"employeeId": 1, "_id": 0}) if x.get("employeeId")]
@@ -68,12 +68,12 @@ def analytics():
         present = sum(1 for p in ps if p.get("attendance") in {"Present", "Partial"})
         attendance_marked = sum(1 for p in ps if p.get("attendance") not in {None, "", "Pending"})
         status = current_status(t); raw = date_text(t.get("startDate", t.get("trainingDate"))); day = raw[:10]
-        try: dt = datetime.fromisoformat(raw.replace("Z", "+00:00")); month_key = dt.strftime("%Y-%m"); year_key = dt.strftime("%Y")
-        except Exception: month_key = day[:7] if len(day) >= 7 else "Unknown"; year_key = day[:4] if len(day) >= 4 else "Unknown"
+        try: dt = datetime.fromisoformat(raw.replace("Z", "+00:00")); month_key = dt.strftime("%Y-%m"); year_key = dt.strftime("%Y"); week_key = f"{dt.isocalendar().year}-W{dt.isocalendar().week:02d}"
+        except Exception: month_key = day[:7] if len(day) >= 7 else "Unknown"; year_key = day[:4] if len(day) >= 4 else "Unknown"; week_key = "Unknown"
         total = len(ps); scope = "One-to-one / Custom" if total <= 1 else "Company-wide / Department"
         item = {"id": tid, "name": t.get("title", "Training"), "type": t.get("trainingType", "Other"), "attendance": round(present / total * 100, 1) if total else 0, "attendanceMarked": attendance_marked, "feedback": round(sum(vals) / len(vals), 2) if vals else 0, "participants": total, "feedbackResponses": len(fs), "feedbackCompletion": round(len(fs) / total * 100, 1) if total else 0, "startDate": raw, "status": status, "scope": scope, "trainer": t.get("trainerName", "")}
         by_training.append(item)
-        for key, label in [(day, day), (month_key, month_key), (year_key, year_key)]:
+        for key, label in [(day, day), (week_key, week_key), (month_key, month_key), (year_key, year_key)]:
             if key not in buckets: buckets[key] = {"period": label, "scheduled": 0, "completed": 0, "ongoing": 0, "upcoming": 0, "cancelled": 0, "attendance": [], "feedback": [], "oneToOne": 0, "companyWide": 0}
             b = buckets[key]; b["scheduled"] += 1; b[status.lower()] = b.get(status.lower(), 0) + 1
             b["attendance"].append(item["attendance"]); b["feedback"].append(item["feedback"])
@@ -85,6 +85,7 @@ def analytics():
     by_period = []
     for key, b in sorted(buckets.items()):
         if period == "day" and len(key) != 10: continue
+        if period == "week" and "-W" not in key: continue
         if period == "month" and len(key) != 7: continue
         if period == "year" and len(key) != 4: continue
         by_period.append({"period": b["period"], "scheduled": b["scheduled"], "completed": b["completed"], "ongoing": b["ongoing"], "upcoming": b["upcoming"], "cancelled": b["cancelled"], "attendance": round(sum(b["attendance"])/len(b["attendance"]),1) if b["attendance"] else 0, "feedback": round(sum(b["feedback"])/len(b["feedback"]),2) if b["feedback"] else 0, "oneToOne": b["oneToOne"], "companyWide": b["companyWide"]})

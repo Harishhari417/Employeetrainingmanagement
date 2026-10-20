@@ -55,7 +55,8 @@ export default function Login() {
   async function submitSignup(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setError(""); setMessage("");
     if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
-    if (form.mobile.replace(/\D/g, "").length < 10) { setError("Enter a valid mobile number with at least 10 digits."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())) { setError("Enter a valid email address, for example abc@gmail.com."); return; }
+    if (!/^[6-9]\d{9}$/.test(form.mobile.replace(/\D/g, ""))) { setError("Enter a valid 10-digit mobile number."); return; }
     setSubmitting(true);
     try {
       await api.post("/auth/signup", form);
@@ -105,7 +106,7 @@ export default function Login() {
         </form> : <form onSubmit={submitSignup} className="mt-6 grid gap-4 sm:grid-cols-2">
           {[
             ["Employee ID *","employeeId","text"],["Full name *","name","text"],["Email *","email","email"],["Mobile number *","mobile","tel"],["Position / Designation *","designation","text"],["Reporting Manager","reportingManager","text"]
-          ].map(([label,key,type])=><label key={key} className={key==="email"?"block":"block"}><span className="mb-1.5 block text-sm font-medium">{label}</span><input required={!["reportingManager"].includes(key)} type={type} value={(form as any)[key]} onChange={e=>setForm({...form,[key]:e.target.value})} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-indigo-500"/></label>)}
+          ].map(([label,key,type])=><label key={key} className={key==="email"?"block":"block"}><span className="mb-1.5 block text-sm font-medium">{label}</span><input required={!["reportingManager"].includes(key)} type={type} pattern={key==="email"?"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}":key==="mobile"?"[6-9][0-9]{9}":undefined} placeholder={key==="email"?"abc@gmail.com":key==="mobile"?"9876543210":""} value={(form as any)[key]} onChange={e=>setForm({...form,[key]:e.target.value})} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-indigo-500"/></label>)}
           <label><span className="mb-1.5 block text-sm font-medium">Account type *</span><select required value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="EMPLOYEE">Employee</option><option value="MANAGER">Manager</option><option value="ADMIN">Admin</option></select></label>
           <label><span className="mb-1.5 block text-sm font-medium">Department *</span><select required value={form.department} onChange={e=>setForm({...form,department:e.target.value})} className="w-full rounded-xl border border-slate-200 px-3 py-2.5">{departments.map(d=><option key={d}>{d}</option>)}</select></label>
           <label><span className="mb-1.5 block text-sm font-medium">Password *</span><input required minLength={8} type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} className="w-full rounded-xl border border-slate-200 px-3 py-2.5"/></label>
