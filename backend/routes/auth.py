@@ -208,21 +208,48 @@ def change_password():
 
 @auth_bp.post("/password/forgot")
 def forgot_password():
+    """Reset a password after matching the employee ID and registered mobile.
+
+    This flow intentionally sends no email or OTP. It requires both identifiers
+    to match the employee record; accounts without a registered mobile must be
+    updated by an administrator before this recovery method can be used.
+    """
     payload = request.get_json(silent=True) or {}
     employee_id = str(payload.get("employeeId", "")).strip().upper()
-    email = str(payload.get("email", "")).strip().lower()
+    mobile = "".join(ch for ch in str(payload.get("mobile", "")) if ch.isdigit())
     new_password = str(payload.get("newPassword", ""))
-    if not employee_id or not email or not new_password:
-        return jsonify({"message": "Employee ID, registered email address, and new password are required"}), 400
+
+    if not employee_id or not mobile or not new_password:
+        return jsonify({"message": "Employee ID, registered mobile number, and new password are required"}), 400
     if len(new_password) < 8:
-        return jsonify({"message": "Password must be at least 8 characters"}), 400
+        return jsonify({"message": "New password must be at least 8 characters"}), 400
+
     employee = db.employees.find_one({"employeeId": employee_id})
-    if not employee or str(employee.get("email", "")).strip().lower() != email:
-        return jsonify({"message": "Employee ID or registered email address does not match"}), 400
+    if not employee:
+        return jsonify({"message": "Employee ID or registered mobile number does not match"}), 400
+
+    stored_mobile = ""
+    for field in ("mobile", "mobileNumber", "phone", "phoneNumber", "contactNumber"):
+        value = employee.get(field)
+        if value:
+            stored_mobile = "".join(ch for ch in str(value) if ch.isdigit())
+            if stored_mobile:
+                break
+
+    if not stored_mobile or stored_mobile != mobile:
+        return jsonify({"message": "Employee ID or registered mobile number does not match. Contact HR if your mobile number is not registered."}), 400
+
     user = db.users.find_one({"username": employee_id.lower()})
     if not user:
         return jsonify({"message": "No login account was found for this employee"}), 404
-    db.users.update_one({"_id": user["_id"]}, {"$set": {"passwordHash": generate_password_hash(new_password), "updatedAt": datetime.now(timezone.utc)}})
+
+    db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "passwordHash": generate_password_hash(new_password),
+            "updatedAt": datetime.now(timezone.utc),
+        }},
+    )
     return jsonify({"message": "Password reset successfully. You can now sign in with your new password."}), 200
 
 
