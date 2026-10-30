@@ -15,7 +15,7 @@ export default function Login() {
   const [mode, setMode] = useState<"login"|"signup"|"forgot">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [resetForm, setResetForm] = useState({ employeeId: "", mobile: "", newPassword: "", confirmPassword: "" });
+  const [resetForm, setResetForm] = useState({ employeeId: "", email: "", newPassword: "", confirmPassword: "" });
   const [form, setForm] = useState({
     employeeId:"", name:"", email:"", mobile:"", password:"", confirmPassword:"",
     department:"Production", designation:"", reportingManager:"", role:"EMPLOYEE"
@@ -39,13 +39,13 @@ export default function Login() {
     try {
       const response = await api.post("/auth/password/forgot", {
         employeeId: resetForm.employeeId.trim().toUpperCase(),
-        mobile: resetForm.mobile,
+        email: resetForm.email.trim().toLowerCase(),
         newPassword: resetForm.newPassword,
       });
       setMessage(response?.data?.message ?? "Password reset successfully. You can now sign in.");
       setUsername(resetForm.employeeId.trim().toUpperCase());
       setPassword("");
-      setResetForm({ employeeId: "", mobile: "", newPassword: "", confirmPassword: "" });
+      setResetForm({ employeeId: "", email: "", newPassword: "", confirmPassword: "" });
       setMode("login");
     } catch (err: any) {
       setError(err?.response?.data?.message ?? "Unable to reset the password. Check your details or contact HR.");
@@ -80,7 +80,7 @@ export default function Login() {
 
       <section className="mx-auto w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl sm:p-8">
         <div className="flex justify-center lg:hidden"><LogoPlaceholder/></div>
-        <div className="mt-5 text-center"><h2 className="text-2xl font-bold">{mode==="login"?"Welcome back":mode==="signup"?"Create your employee account":"Reset your password"}</h2><p className="mt-2 text-sm text-slate-500">{mode==="login"?"Sign in with the Employee ID and password stored in the portal.":mode==="signup"?"All fields marked with * are required.":"Confirm your Employee ID and registered mobile number. No email or OTP will be sent."}</p></div>
+        <div className="mt-5 text-center"><h2 className="text-2xl font-bold">{mode==="login"?"Welcome back":mode==="signup"?"Create your employee account":"Reset your password"}</h2><p className="mt-2 text-sm text-slate-500">{mode==="login"?"Sign in with the Employee ID and password stored in the portal.":mode==="signup"?"All fields marked with * are required.":"Confirm your Employee ID and registered email address."}</p></div>
 
         {mode!=="forgot" && <div className="mt-6 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
           <button type="button" onClick={()=>{setMode("login");setError("");setMessage("");}} className={`rounded-lg px-3 py-2.5 text-sm font-semibold ${mode==="login"?"bg-white text-indigo-700 shadow-sm":"text-slate-600"}`}><span className="inline-flex items-center gap-2"><LogIn size={16}/> Sign in</span></button>
@@ -92,7 +92,7 @@ export default function Login() {
 
         {mode==="forgot" ? <form onSubmit={submitForgotPassword} className="mt-6 space-y-4">
           <label className="block"><span className="mb-1.5 block text-sm font-medium">Employee ID</span><input required value={resetForm.employeeId} onChange={e=>setResetForm({...resetForm,employeeId:e.target.value})} autoComplete="username" className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-500" placeholder="Enter your Employee ID" /></label>
-          <label className="block"><span className="mb-1.5 block text-sm font-medium">Registered mobile number</span><input required type="tel" value={resetForm.mobile} onChange={e=>setResetForm({...resetForm,mobile:e.target.value})} autoComplete="tel" className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-500" placeholder="Enter the mobile number registered with HR" /></label>
+          <label className="block"><span className="mb-1.5 block text-sm font-medium">Registered email address</span><input required type="email" value={resetForm.email} onChange={e=>setResetForm({...resetForm,email:e.target.value})} autoComplete="email" className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-500" placeholder="Enter the email registered with HR" /></label>
           <label className="block"><span className="mb-1.5 block text-sm font-medium">New password</span><input required minLength={8} type="password" value={resetForm.newPassword} onChange={e=>setResetForm({...resetForm,newPassword:e.target.value})} autoComplete="new-password" className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-500" /></label>
           <label className="block"><span className="mb-1.5 block text-sm font-medium">Confirm new password</span><input required minLength={8} type="password" value={resetForm.confirmPassword} onChange={e=>setResetForm({...resetForm,confirmPassword:e.target.value})} autoComplete="new-password" className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-500" /></label>
           <button disabled={submitting} className="w-full rounded-xl bg-indigo-600 py-3 font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">{submitting?"Resetting password...":"Reset password"}</button>

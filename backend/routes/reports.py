@@ -67,7 +67,8 @@ def feedback_rows(training_id):
     for f in db.feedback.find({"trainingId":training_id}).sort("submittedAt",-1):
         e=db.employees.find_one({"employeeId":f.get("employeeId")},{"name":1,"department":1,"_id":0}) or {}
         ratings=f.get("ratings",{})
-        rows.append({"Employee ID":f.get("employeeId",""),"Employee":e.get("name",""),"Department":e.get("department",""),"Programme":f.get("programme",""),"Trainer":f.get("trainer",f.get("trainerName","")),"Location":f.get("location",""),"Training Dates":f.get("dates",""),"Programme Design":ratings.get("Programme Design",""),"Presentation of Information":ratings.get("Presentation of Information",""),"Amount of Information":ratings.get("Amount of Information",""),"Administrative Arrangements":ratings.get("Administrative arrangements",""),"Overall Rating":ratings.get("overall",""),"Knowledge Before":f.get("knowledgeBefore",""),"Knowledge After":f.get("knowledgeAfter",""),"Best Module":f.get("bestModule",""),"Missed Module":f.get("missedModule",""),"Major Learning":f.get("majorLearning",""),"Ideas to Implement":f.get("ideasToImplement",""),"Other Remarks":f.get("remarks",""),"Status":f.get("status","Pending"),"Submitted At":f.get("submittedAt","")})
+        training = db.trainings.find_one({"_id": ObjectId(training_id)}) if ObjectId.is_valid(training_id) else {}
+        rows.append({"Employee Name":e.get("name",""),"Employee ID":f.get("employeeId",""),"Department":e.get("department",""),"Training Name":(training or {}).get("title",f.get("trainingTitle",f.get("programme",""))),"Programme":f.get("programme",""),"Trainer":f.get("trainer",f.get("trainerName",(training or {}).get("trainerName",""))),"Location":f.get("location",""),"Training Dates":f.get("dates",""),"Programme Design":ratings.get("Programme Design",""),"Presentation of Information":ratings.get("Presentation of Information",""),"Amount of Information":ratings.get("Amount of Information",""),"Administrative Arrangements":ratings.get("Administrative arrangements",""),"Overall Rating":ratings.get("overall",""),"Knowledge Before":f.get("knowledgeBefore",""),"Knowledge After":f.get("knowledgeAfter",""),"Best Module":f.get("bestModule",""),"Missed Module":f.get("missedModule",""),"Major Learning":f.get("majorLearning",""),"Ideas to Implement":f.get("ideasToImplement",""),"Other Remarks":f.get("remarks",""),"Status":f.get("status","Pending"),"Submitted At":f.get("submittedAt","")})
     return rows
 
 def trainee_trainer_rows(training_id, training):
@@ -77,10 +78,50 @@ def trainee_trainer_rows(training_id, training):
         rows.append({"Trainee ID":p.get("employeeId",""),"Trainee":e.get("name",""),"Department":e.get("department",""),"Designation":e.get("designation",""),"Trainer":training.get("trainerName",""),"Trainer Employee ID":training.get("trainerEmployeeId",""),"Attendance":p.get("attendance","Pending"),"Feedback":p.get("feedbackStatus","Pending"),"Completion":p.get("completionStatus","Not Started")})
     return rows
 
+def training_detail_rows(training):
+    tid = str(training["_id"])
+    participants = list(db.training_participants.find({"trainingId": tid}))
+    names = []
+    for participant in participants:
+        emp = db.employees.find_one({"employeeId": participant.get("employeeId")}, {"name": 1, "_id": 0}) or {}
+        names.append(emp.get("name") or participant.get("employeeId", ""))
+    start = training.get("startDate", training.get("trainingDate", ""))
+    end = training.get("endDate", start)
+    duration = training.get("durationMinutes", training.get("duration", ""))
+    try:
+        total_hours = round(float(duration) / 60, 2) if duration not in (None, "") else 0
+    except (TypeError, ValueError):
+        total_hours = 0
+    if not total_hours and start and end:
+        try:
+            st = datetime.fromisoformat(str(start).replace("Z", "+00:00")); en = datetime.fromisoformat(str(end).replace("Z", "+00:00"))
+            total_hours = round(max(0, (en-st).total_seconds()/3600), 2)
+        except Exception: pass
+    trainer_type = training.get("trainerCategory", training.get("trainerType", ""))
+    mode = training.get("reportTrainingMode", training.get("trainingCategory", ""))
+    if not mode:
+        title_type = (str(training.get("title", "")) + " " + str(training.get("trainingType", ""))).lower()
+        if "refresher" in title_type: mode = "Refresher Training"
+        elif len(participants) == 1: mode = "One-to-one Training"
+        elif len(participants) >= db.employees.count_documents({"status": {"$ne": "Inactive"}}) and participants: mode = "Company-wide Training"
+        else: mode = "Customized Training"
+    if duration in (None, "", 0, "0") and total_hours:
+        duration = f"{total_hours} hours"
+    elif duration not in (None, "", 0, "0"):
+        duration = f"{duration} minutes"
+    content = training.get("content", training.get("description", ""))
+    attendance = "; ".join(f'{x.get("employeeId", "")}: {x.get("attendance", "Pending")}' for x in participants)
+    return [{"Training Name": training.get("title", ""), "Training Content": content, "Training Type": training.get("trainingType", ""), "Trainer Name": training.get("trainerName", ""), "Trainer": trainer_type, "Trainee Names": ", ".join(names), "Date": str(start), "End Date": str(end), "Training Mode": mode, "Delivery Mode": training.get("trainingMode", ""), "Attendance": attendance, "Duration": duration, "Total Hours": total_hours}]
+
 @reports_bp.get("/trainings")
 @jwt_required()
 def report_trainings():
     claims=get_jwt(); query={}
+    from_date=request.args.get("fromDate", "").strip(); to_date=request.args.get("toDate", "").strip()
+    date_filter={}
+    if from_date: date_filter["$gte"]=from_date
+    if to_date: date_filter["$lte"]=to_date+"T23:59:59"
+    if date_filter: query["startDate"]=date_filter
     if claims.get("role")=="MANAGER":
         ids=[x.get("employeeId") for x in db.employees.find({"department":claims.get("department")},{"employeeId":1,"_id":0}) if x.get("employeeId")]
         query["$or"]=[{"departments":claims.get("department")},{"traineeIds":{"$in":ids}}]
@@ -96,14 +137,31 @@ def report_trainings():
 def combined_training_report(training_id):
     claims=get_jwt(); t=training_or_404(training_id)
     if not t or not allowed_training(claims,t): return jsonify({"message":"Training not found or access denied"}),403
-    attendance=attendance_rows(training_id); feedback=feedback_rows(training_id); trainee=trainee_trainer_rows(training_id,t)
+    attendance=attendance_rows(training_id); feedback=feedback_rows(training_id); trainee=trainee_trainer_rows(training_id,t); details=training_detail_rows(t)
     if request.args.get("format")=="xlsx":
-        return xlsx_response([("Attendance",attendance),("Feedback",feedback),("Trainee-Trainer",trainee)],f"{t.get('title','training').replace(' ','-')}-report.xlsx")
+        return xlsx_response([("Training Details",details),("Attendance",attendance),("Feedback",feedback),("Trainee-Trainer",trainee)],f"{t.get('title','training').replace(' ','-')}-report.xlsx")
     feedback_map={r["Employee ID"]:r for r in feedback}; attendance_map={r["Employee ID"]:r for r in attendance}
     combined=[]
     for row in trainee:
         eid=row["Trainee ID"]; combined.append({**row,"Attendance Marked By":attendance_map.get(eid,{}).get("Marked By",""),"Overall Feedback":feedback_map.get(eid,{}).get("Overall",""),"Major Learning":feedback_map.get(eid,{}).get("Major Learning",""),"Remarks":feedback_map.get(eid,{}).get("Remarks",""),"Feedback Submitted At":feedback_map.get(eid,{}).get("Submitted At","")})
-    return jsonify({"training":{"id":training_id,"title":t.get("title",""),"trainer":t.get("trainerName",""),"trainingType":t.get("trainingType",""),"status":t.get("status","Upcoming")},"rows":combined,"sheets":{"attendance":attendance,"feedback":feedback,"traineeTrainer":trainee}})
+    return jsonify({"training":{"id":training_id,"title":t.get("title",""),"trainer":t.get("trainerName",""),"trainingType":t.get("trainingType",""),"status":t.get("status","Upcoming")},"rows":details,"sheets":{"trainingDetails":details,"attendance":attendance,"feedback":feedback,"traineeTrainer":trainee}})
+
+@reports_bp.get("/overall.xlsx")
+@jwt_required()
+def overall_report():
+    claims=get_jwt(); query={}
+    if claims.get("role")=="MANAGER":
+        ids=[x.get("employeeId") for x in db.employees.find({"department":claims.get("department")},{"employeeId":1,"_id":0}) if x.get("employeeId")]
+        query["$or"]=[{"departments":claims.get("department")},{"traineeIds":{"$in":ids}}]
+    elif claims.get("role")=="EMPLOYEE": query["$or"]=[{"trainerEmployeeId":claims.get("employeeId")},{"traineeIds":claims.get("employeeId")}]
+    from_date=request.args.get("fromDate", "").strip(); to_date=request.args.get("toDate", "").strip(); date_filter={}
+    if from_date: date_filter["$gte"]=from_date
+    if to_date: date_filter["$lte"]=to_date+"T23:59:59"
+    if date_filter: query["startDate"]=date_filter
+    details=[]; attendance=[]; feedback=[]; relations=[]
+    for training in db.trainings.find(query).sort("startDate",1):
+        tid=str(training["_id"]); details.extend(training_detail_rows(training)); attendance.extend(attendance_rows(tid)); feedback.extend(feedback_rows(tid)); relations.extend(trainee_trainer_rows(tid,training))
+    return xlsx_response([("Training Details",details),("Attendance",attendance),("Feedback",feedback),("Trainee-Trainer",relations)], "overall-training-report.xlsx")
 
 @reports_bp.get("/monthly.xlsx")
 @jwt_required()
