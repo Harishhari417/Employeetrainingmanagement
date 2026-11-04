@@ -82,6 +82,9 @@ def feedback_rows(training_id):
             "Trainer Category":t.get("trainerCategory",f.get("trainerCategory","")),
             "Venue / Location":f.get("location",t.get("venue","")),
             "Training Date":f.get("dates",t.get("startDate",t.get("trainingDate",""))),
+            "Training Mode":t.get("trainingMode",t.get("trainingModeType","")),
+            "Trainee Names":"; ".join((db.employees.find_one({"employeeId": p.get("employeeId")}, {"name":1,"_id":0}) or {}).get("name", p.get("employeeId","")) for p in db.training_participants.find({"trainingId":training_id})),
+            "Attendance":(db.training_participants.find_one({"trainingId":training_id,"employeeId":f.get("employeeId")}) or {}).get("attendance","Pending"),
             "Programme Design":ratings.get("Programme Design",""),
             "Presentation of Information":ratings.get("Presentation of Information",""),
             "Amount of Information":ratings.get("Amount of Information",""),
@@ -109,6 +112,63 @@ def feedback_rows(training_id):
         rows.append(row)
     return rows
 
+def training_summary_rows(training_id, training):
+    participants = list(db.training_participants.find({"trainingId": training_id}))
+    trainee_names = []
+    for participant in participants:
+        employee = db.employees.find_one({"employeeId": participant.get("employeeId")}, {"name": 1, "_id": 0}) or {}
+        trainee_names.append(employee.get("name") or participant.get("employeeId", ""))
+    raw_date = training.get("startDate", training.get("trainingDate", ""))
+    date_value = raw_date
+    if hasattr(date_value, "isoformat"):
+        date_value = date_value.isoformat()
+    minutes = training.get("durationMinutes")
+    try:
+        total_hours = float(minutes) / 60 if minutes not in (None, "", 0, "0") else 0
+    except (TypeError, ValueError):
+        total_hours = 0
+    if not total_hours and training.get("startDate") and training.get("endDate"):
+        try:
+            start = datetime.fromisoformat(str(training["startDate"]).replace("Z", "+00:00"))
+            end = datetime.fromisoformat(str(training["endDate"]).replace("Z", "+00:00"))
+            total_hours = max(0, (end - start).total_seconds() / 3600)
+        except Exception:
+            pass
+    rows = []
+    for participant in participants:
+        employee = db.employees.find_one({"employeeId": participant.get("employeeId")}, {"name": 1, "_id": 0}) or {}
+        rows.append({
+            "Training content": training.get("content", ""),
+            "Training type": training.get("trainingType", ""),
+            "Trainer name": training.get("trainerName", ""),
+            "Trainer - external /internal": training.get("trainerCategory", ""),
+            "Trainee names": "; ".join(trainee_names),
+            "Date": date_value,
+            "Training mode": training.get("trainingMode", training.get("trainingModeType", "")),
+            "Attendance": participant.get("attendance", "Pending"),
+            "Duration": (f"{training.get('durationMinutes')} minutes" if training.get("durationMinutes") not in (None, "", 0, "0") else training.get("duration", f"{round(total_hours, 2)} hours" if total_hours else "")),
+            "Total hours": round(total_hours, 2),
+            "Trainee name": employee.get("name", participant.get("employeeId", "")),
+            "Trainee ID": participant.get("employeeId", "")
+        })
+    if not rows:
+        rows.append({
+            "Training content": training.get("content", ""),
+            "Training type": training.get("trainingType", ""),
+            "Trainer name": training.get("trainerName", ""),
+            "Trainer - external /internal": training.get("trainerCategory", ""),
+            "Trainee names": "; ".join(trainee_names),
+            "Date": date_value,
+            "Training mode": training.get("trainingMode", training.get("trainingModeType", "")),
+            "Attendance": "",
+            "Duration": (f"{training.get('durationMinutes')} minutes" if training.get("durationMinutes") not in (None, "", 0, "0") else training.get("duration", f"{round(total_hours, 2)} hours" if total_hours else "")),
+            "Total hours": round(total_hours, 2),
+            "Trainee name": "",
+            "Trainee ID": ""
+        })
+    return rows
+
+
 def trainee_trainer_rows(training_id, training):
     rows=[]
     for p in db.training_participants.find({"trainingId":training_id}):
@@ -133,16 +193,32 @@ def report_trainings():
 @reports_bp.get("/training/<training_id>/combined")
 @jwt_required()
 def combined_training_report(training_id):
-    claims=get_jwt(); t=training_or_404(training_id)
-    if not t or not allowed_training(claims,t): return jsonify({"message":"Training not found or access denied"}),403
-    attendance=attendance_rows(training_id); feedback=feedback_rows(training_id); trainee=trainee_trainer_rows(training_id,t)
-    if request.args.get("format")=="xlsx":
-        return xlsx_response([("Attendance",attendance),("Feedback",feedback),("Trainee-Trainer",trainee)],f"{t.get('title','training').replace(' ','-')}-report.xlsx")
-    feedback_map={r["Employee ID"]:r for r in feedback}; attendance_map={r["Employee ID"]:r for r in attendance}
-    combined=[]
-    for row in trainee:
-        eid=row["Trainee ID"]; combined.append({**row,"Attendance Marked By":attendance_map.get(eid,{}).get("Marked By",""),"Overall Feedback":feedback_map.get(eid,{}).get("Overall",""),"Major Learning":feedback_map.get(eid,{}).get("Major Learning",""),"Remarks":feedback_map.get(eid,{}).get("Remarks",""),"Feedback Submitted At":feedback_map.get(eid,{}).get("Submitted At","")})
-    return jsonify({"training":{"id":training_id,"title":t.get("title",""),"trainer":t.get("trainerName",""),"trainingType":t.get("trainingType",""),"status":t.get("status","Upcoming")},"rows":combined,"sheets":{"attendance":attendance,"feedback":feedback,"traineeTrainer":trainee}})
+    claims = get_jwt()
+    training = training_or_404(training_id)
+    if not training or not allowed_training(claims, training):
+        return jsonify({"message": "Training not found or access denied"}), 403
+
+    if request.args.get("format") == "feedback_xlsx":
+        responses = feedback_rows(training_id)
+        return xlsx_response([("Feedback Responses", responses)], f"{training.get('title', 'training').replace(' ', '-')}-feedback.xlsx")
+
+    rows = training_summary_rows(training_id, training)
+    if request.args.get("format") == "xlsx":
+        export_rows = [{k: v for k, v in row.items() if k not in {"Trainee name", "Trainee ID"}} for row in rows]
+        return xlsx_response([("Training Report", export_rows)], f"{training.get('title', 'training').replace(' ', '-')}-report.xlsx")
+    display_rows = [{k: v for k, v in row.items() if k not in {"Trainee name", "Trainee ID"}} for row in rows]
+    return jsonify({
+        "training": {
+            "id": training_id,
+            "title": training.get("title", ""),
+            "trainer": training.get("trainerName", ""),
+            "trainingType": training.get("trainingType", ""),
+            "status": training.get("status", "Upcoming")
+        },
+        "rows": display_rows,
+        "sheets": {"training": display_rows}
+    })
+
 
 @reports_bp.get("/monthly.xlsx")
 @jwt_required()
@@ -226,32 +302,15 @@ def overall_report():
     if start_dt and end_dt and start_dt>end_dt:
         return jsonify({"message":"From date cannot be after To date"}),400
     details=[]
-    for t in db.trainings.find(query).sort("startDate",1):
-        raw=t.get("startDate",t.get("trainingDate")); raw_end=t.get("endDate",raw)
+    for training in db.trainings.find(query).sort("startDate",1):
+        raw = training.get("startDate", training.get("trainingDate"))
+        raw_end = training.get("endDate", raw)
         def parsed(value):
-            if hasattr(value,"date"): return value.replace(tzinfo=None)
+            if hasattr(value, "date"): return value.replace(tzinfo=None)
             try: return datetime.fromisoformat(str(value).replace("Z","+00:00")).replace(tzinfo=None)
             except Exception: return None
-        dt=parsed(raw); end_dt_value=parsed(raw_end)
-        compare=dt or end_dt_value
-        if start_dt and (not compare or compare.date()<start_dt.date()): continue
-        if end_dt and (not compare or compare.date()>end_dt.date()): continue
-        tid=str(t["_id"]); participants=list(db.training_participants.find({"trainingId":tid}))
-        names=[]; attendance=[]
-        for part in participants:
-            emp=db.employees.find_one({"employeeId":part.get("employeeId")}) or {}
-            names.append(f"{emp.get('name',part.get('employeeId',''))} ({part.get('employeeId','')})")
-            attendance.append(f"{emp.get('name',part.get('employeeId',''))}: {part.get('attendance','Pending')}")
-        duration=t.get("durationMinutes")
-        if duration is None and dt and end_dt_value: duration=max(0,int((end_dt_value-dt).total_seconds()/60))
-        hours=round(float(duration or 0)/60,2)
-        details.append({
-            "Training Name":t.get("title",""),"Training Content":t.get("content",""),
-            "Training Type":t.get("trainingType",""),"Trainer Name":t.get("trainerName",""),
-            "Trainer Category":t.get("trainerCategory",""),"Trainee Names":"; ".join(names),
-            "Start Date":raw or "","End Date":raw_end or "","Date":raw or "",
-            "Training Mode":t.get("trainingMode",t.get("trainingModeType","")),
-            "Attendance":"; ".join(attendance),"Duration (Minutes)":duration or 0,
-            "Total Hours":hours,"Total Trainees":len(participants),"Status":t.get("status","Pending")
-        })
+        dt = parsed(raw); end_dt_value = parsed(raw_end); compare = dt or end_dt_value
+        if start_dt and (not compare or compare.date() < start_dt.date()): continue
+        if end_dt and (not compare or compare.date() > end_dt.date()): continue
+        details.extend([{k:v for k,v in row.items() if k not in {"Trainee name","Trainee ID"}} for row in training_summary_rows(str(training["_id"]), training)])
     return xlsx_response([("Overall Training Details",details)],"overall-training-report.xlsx")

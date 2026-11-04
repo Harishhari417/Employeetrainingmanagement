@@ -83,6 +83,31 @@ def dashboard():
         total_trainings = db.trainings.count_documents(training_filter)
         completed_trainings = db.trainings.count_documents({**training_filter, "status": "Completed"})
         training_docs = list(db.trainings.find(training_filter, {"durationMinutes": 1, "startDate": 1, "endDate": 1, "trainingDate": 1, "_id": 0}))
+        selected_year = request.args.get("year", str(datetime.now().year))
+        try:
+            selected_year = int(selected_year)
+        except (TypeError, ValueError):
+            selected_year = datetime.now().year
+        monthly_hours = {m: 0.0 for m in range(1, 13)}
+        for item in db.trainings.find(training_filter, {"durationMinutes": 1, "startDate": 1, "endDate": 1, "trainingDate": 1, "_id": 0}):
+            raw_date = item.get("startDate", item.get("trainingDate"))
+            try:
+                dt = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+                if dt.year != selected_year:
+                    continue
+                minutes = item.get("durationMinutes")
+                if minutes not in (None, 0, "0", ""):
+                    hours = max(0, float(minutes)) / 60
+                elif item.get("startDate") and item.get("endDate"):
+                    st = datetime.fromisoformat(str(item["startDate"]).replace("Z", "+00:00"))
+                    en = datetime.fromisoformat(str(item["endDate"]).replace("Z", "+00:00"))
+                    hours = max(0, (en - st).total_seconds() / 3600)
+                else:
+                    hours = 0
+                monthly_hours[dt.month] += hours
+            except Exception:
+                continue
+
         total_training_hours = 0.0
         for item in training_docs:
             minutes = item.get("durationMinutes")
@@ -141,6 +166,7 @@ def dashboard():
             "evaluationFeedback": evaluation_feedback,
             "evaluationCompleted": evaluation_completed,
             "trainingTypes": type_stats,
+            "monthlyTrainingHours": [{"month": datetime(selected_year, m, 1).strftime("%b"), "hours": round(monthly_hours[m], 1)} for m in range(1, 13)],
         }), 200
     except Exception as error:
         print("DASHBOARD ERROR:", error)
