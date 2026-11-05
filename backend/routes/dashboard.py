@@ -116,7 +116,6 @@ def dashboard():
                 except (TypeError, ValueError): pass
             elif item.get("startDate") and item.get("endDate"):
                 try:
-                    from datetime import datetime
                     st = datetime.fromisoformat(str(item["startDate"]).replace("Z", "+00:00"))
                     en = datetime.fromisoformat(str(item["endDate"]).replace("Z", "+00:00"))
                     total_training_hours += max(0, (en - st).total_seconds() / 3600)
