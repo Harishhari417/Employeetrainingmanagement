@@ -89,15 +89,21 @@ export default function AppShell() {
     const [profileOpen, setProfileOpen] = useState(false);
     const { user, logout } = useAuth();
     const location = useLocation();
+    const scrollContentToTop = (behavior: ScrollBehavior = "auto") => {
+        const content = document.getElementById("app-content-scroll");
+        if (content && window.matchMedia("(min-width: 1024px)").matches) {
+            content.scrollTo({ top: 0, left: 0, behavior });
+        } else {
+            window.scrollTo({ top: 0, left: 0, behavior });
+        }
+    };
     useEffect(() => {
-        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+        scrollContentToTop("auto");
         setOpen(false);
     }, [location.pathname]);
     useEffect(() => {
         const handleSubmit = () => {
-            window.requestAnimationFrame(() => {
-                window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-            });
+            window.requestAnimationFrame(() => scrollContentToTop("smooth"));
         };
         document.addEventListener("submit", handleSubmit, true);
         return () => document.removeEventListener("submit", handleSubmit, true);
@@ -109,10 +115,10 @@ export default function AppShell() {
         .slice(0, 2)
         .join("")
         .toUpperCase() ?? "U";
-    return (<div className="min-h-screen bg-slate-50">
+    return (<div className="app-shell min-h-screen bg-slate-50 lg:h-dvh lg:min-h-0 lg:overflow-hidden">
       {open && (<button aria-label="Close navigation" className="fixed inset-0 z-30 bg-slate-950/30 lg:hidden" onClick={() => setOpen(false)}/>)}
 
-      <aside className={`fixed inset-y-0 left-0 z-40 w-72 transform border-r border-slate-200 bg-white transition-transform lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside className={`app-sidebar fixed inset-y-0 left-0 z-40 flex w-72 max-w-[85vw] transform flex-col border-r border-slate-200 bg-white transition-transform duration-200 lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex h-20 items-center gap-3 border-b border-slate-100 px-5">
           <img src="/EVIG-Intergration_horizantal_Logo_1500-1.png" alt="EVIG Integration" className="h-11 w-auto max-w-[150px] object-contain"/>
 
@@ -130,7 +136,7 @@ export default function AppShell() {
           </button>
         </div>
 
-        <nav className="space-y-1 overflow-y-auto p-4 pb-24">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-x-hidden overflow-y-auto overscroll-contain p-4 pb-6">
           {visibleLinks.map(({ to, label, icon: Icon }) => (<NavLink key={to} to={to} end={to === "/"} onClick={() => setOpen(false)} className={({ isActive }) => `flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition ${isActive
                 ? "bg-indigo-50 text-indigo-700"
                 : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
@@ -139,7 +145,7 @@ export default function AppShell() {
             </NavLink>))}
         </nav>
 
-        <div className="absolute bottom-0 w-full border-t border-slate-100 bg-white p-4">
+        <div className="mt-auto shrink-0 border-t border-slate-100 bg-white p-4">
           <button onClick={logout} className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900">
             <LogOut size={18}/>
             Logout
@@ -147,7 +153,7 @@ export default function AppShell() {
         </div>
       </aside>
 
-      <div className="flex min-h-screen flex-col lg:pl-72">
+      <div id="app-content-scroll" className="app-content-scroll flex min-h-screen min-w-0 flex-col lg:ml-72 lg:h-dvh lg:min-h-0 lg:overflow-x-hidden lg:overflow-y-auto">
         <header className="sticky top-0 z-20 flex h-20 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <button aria-label="Open navigation" className="rounded-xl p-2 hover:bg-slate-100 lg:hidden" onClick={() => setOpen(true)}>
