@@ -1,4 +1,3 @@
-
 import { Routes, Route } from "react-router-dom";
 import AppShell from "./components/AppShell";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -13,39 +12,36 @@ import Evaluations from "./pages/Evaluations";
 import Analytics from "./pages/Analytics";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
-
+import AdminDatabase from "./pages/AdminDatabase";
 export default function App() {
-  return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
+    return (<Routes>
+      <Route path="/login" element={<Login />}/>
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/admin" element={<ProtectedRoute roles={["HR_ADMIN"]} />}><Route index element={<Dashboard />} /></Route>
-          <Route path="/manager" element={<ProtectedRoute roles={["MANAGER"]} />}><Route index element={<Dashboard />} /></Route>
-          <Route path="/employee" element={<ProtectedRoute roles={["EMPLOYEE"]} />}><Route index element={<Dashboard />} /></Route>
-          <Route path="/attendance" element={<Attendance />} />
-          <Route path="/feedback" element={<Feedback />} />
-          <Route path="/feedback/add" element={<Feedback />} />
-          <Route path="/feedback/view" element={<Feedback />} />
-          <Route path="/trainings" element={<Trainings />} />
-          <Route path="/evaluations" element={<Evaluations />} />
+          <Route path="/" element={<Dashboard />}/>
+          <Route path="/admin" element={<ProtectedRoute roles={["HR_ADMIN"]}/>}><Route index element={<Dashboard />}/></Route>
+          <Route path="/manager" element={<ProtectedRoute roles={["MANAGER"]}/>}><Route index element={<Dashboard />}/></Route>
+          <Route path="/employee" element={<ProtectedRoute roles={["EMPLOYEE"]}/>}><Route index element={<Dashboard />}/></Route>
+          <Route path="/attendance" element={<Attendance />}/>
+          <Route path="/feedback" element={<Feedback />}/>
+          <Route path="/feedback/add" element={<Feedback />}/>
+          <Route path="/feedback/view" element={<Feedback />}/>
+          <Route path="/trainings" element={<Trainings />}/>
+          <Route path="/evaluations" element={<Evaluations />}/>
 
-          <Route element={<ProtectedRoute roles={["HR_ADMIN", "MANAGER"]} />}>
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/reports" element={<Reports />} />
+          <Route element={<ProtectedRoute roles={["HR_ADMIN", "MANAGER"]}/>}>
+            <Route path="/analytics" element={<Analytics />}/>
+            <Route path="/reports" element={<Reports />}/>
           </Route>
 
-          <Route element={<ProtectedRoute roles={["HR_ADMIN"]} />}>
-            <Route path="/employees" element={<Employees />} />
-            <Route path="/departments" element={<Departments />} />
+          <Route element={<ProtectedRoute roles={["HR_ADMIN"]}/>}>
+            <Route path="/employees" element={<Employees />}/>
+            <Route path="/departments" element={<Departments />}/>\n            <Route path="/database" element={<AdminDatabase />}/>
           </Route>
 
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings" element={<Settings />}/>
         </Route>
       </Route>
-    </Routes>
-  );
+    </Routes>);
 }
-

@@ -79,6 +79,7 @@ def dashboard():
         else:
             training_filter = {}
 
+        base_training_filter = dict(training_filter)
         training_filter.update(training_query)
         total_trainings = db.trainings.count_documents(training_filter)
         completed_trainings = db.trainings.count_documents({**training_filter, "status": "Completed"})
@@ -89,12 +90,14 @@ def dashboard():
         except (TypeError, ValueError):
             selected_year = datetime.now().year
         monthly_hours = {m: 0.0 for m in range(1, 13)}
-        for item in db.trainings.find(training_filter, {"durationMinutes": 1, "startDate": 1, "endDate": 1, "trainingDate": 1, "_id": 0}):
-            raw_date = item.get("startDate", item.get("trainingDate"))
+        monthly_trainings = {m: 0 for m in range(1, 13)}
+        for item in db.trainings.find(base_training_filter, {"durationMinutes": 1, "startDate": 1, "endDate": 1, "trainingDate": 1, "_id": 0}):
+            raw_date = item.get("startDate") or item.get("trainingDate")
             try:
                 dt = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
                 if dt.year != selected_year:
                     continue
+                monthly_trainings[dt.month] += 1
                 minutes = item.get("durationMinutes")
                 if minutes not in (None, 0, "0", ""):
                     hours = max(0, float(minutes)) / 60
@@ -166,6 +169,8 @@ def dashboard():
             "evaluationCompleted": evaluation_completed,
             "trainingTypes": type_stats,
             "monthlyTrainingHours": [{"month": datetime(selected_year, m, 1).strftime("%b"), "hours": round(monthly_hours[m], 1)} for m in range(1, 13)],
+            "monthlyTrainings": [{"month": datetime(selected_year, m, 1).strftime("%b"), "count": monthly_trainings[m]} for m in range(1, 13)],
+            "selectedYear": selected_year,
         }), 200
     except Exception as error:
         print("DASHBOARD ERROR:", error)

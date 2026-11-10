@@ -2,20 +2,62 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Download, Save, Search } from "lucide-react";
 import { api } from "../services/api";
 import { useAuth } from "../auth/AuthContext";
-
-type Training={_id:string;title:string;startDate?:string;endDate?:string;trainerName?:string;trainerEmployeeId?:string;venue?:string;status?:string};
-type Row={employeeId:string;employeeName:string;department:string;attendance:"Present"|"Absent"|"Partial"|"Pending";feedbackStatus:string;trainingTitle?:string};
-export default function Attendance(){
- const {user}=useAuth(); const [trainings,setTrainings]=useState<Training[]>([]); const [trainingId,setTrainingId]=useState(""); const [rows,setRows]=useState<Row[]>([]); const [search,setSearch]=useState(""); const [startDate,setStartDate]=useState(""); const [endDate,setEndDate]=useState(""); const [message,setMessage]=useState(""); const [loading,setLoading]=useState(false); const [saving,setSaving]=useState(false);
- const loadTrainings=async()=>{const r=await api.get<Training[]>("/attendance/trainings");setTrainings(r.data||[]);if(!trainingId&&r.data?.[0])setTrainingId(r.data[0]._id)};
- useEffect(()=>{loadTrainings().catch(()=>{})},[]);
- useEffect(()=>{if(!trainingId)return;setLoading(true);const q=new URLSearchParams({trainingId});if(search)q.set("search",search);if(startDate)q.set("startDate",startDate);if(endDate)q.set("endDate",endDate);api.get<Row[]>(`/attendance?${q}`).then(r=>setRows(r.data||[])).catch(()=>setRows([])).finally(()=>setLoading(false))},[trainingId,search,startDate,endDate]);
- const selected=useMemo(()=>trainings.find(t=>t._id===trainingId),[trainings,trainingId]);
- const canMark=selected?.trainerEmployeeId===user?.employeeId||user?.role==="HR_ADMIN"||user?.role==="MANAGER";
- const downloadAttendance=()=>{const headers=["Training","Training Date","Employee ID","Employee Name","Department","Attendance","Feedback Status"];const data=rows.map(r=>[selected?.title||"",selected?.startDate||"",r.employeeId,r.employeeName,r.department,r.attendance,r.feedbackStatus]);const csv=[headers,...data].map(row=>row.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\r\n");const blob=new Blob(["\ufeff",csv],{type:"text/csv;charset=utf-8;"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`attendance-${(selected?.title||"training").replace(/[^a-z0-9]+/gi,"-").toLowerCase()}.csv`;a.click();URL.revokeObjectURL(url)};
- const save=async()=>{try{setSaving(true);await api.post("/attendance/bulk",{trainingId,rows:rows.map(r=>({employeeId:r.employeeId,attendance:r.attendance}))});setMessage("Attendance saved successfully.");setTimeout(()=>setMessage(""),3000);const r=await api.get<Row[]>(`/attendance?trainingId=${trainingId}`);setRows(r.data||[])}catch(e:any){setMessage(e?.response?.data?.message||"Unable to save attendance.")}finally{setSaving(false)}};
- return <div className="space-y-6"><div><p className="text-sm font-medium text-indigo-600">Training Attendance</p><h1 className="mt-1 text-2xl font-bold sm:text-3xl">Attendance</h1><p className="mt-2 text-sm text-slate-500">Assigned trainings only. The assigned trainer can mark trainee attendance.</p></div>{message&&<div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm font-medium text-emerald-700"><CheckCircle2 size={18}/>{message}</div>}
- <section className="rounded-2xl border bg-white p-5 shadow-sm"><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4"><div className="relative lg:col-span-2"><Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search training, trainee or trainer" className="w-full rounded-xl border px-10 py-3 text-sm"/></div><input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} className="rounded-xl border px-3 py-3 text-sm"/><input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} className="rounded-xl border px-3 py-3 text-sm"/></div><div className="mt-4 grid gap-3 md:grid-cols-2"><div><p className="text-xs text-slate-500">Training</p><p className="mt-1 font-semibold">{selected?.title||"No training selected"}</p></div><div><p className="text-xs text-slate-500">Trainer</p><p className="mt-1 font-semibold">{selected?.trainerName||"—"} {selected?.trainerEmployeeId?`(${selected.trainerEmployeeId})`:""}</p></div><div><p className="text-xs text-slate-500">Start</p><p className="mt-1 font-semibold">{selected?.startDate?new Date(selected.startDate).toLocaleString("en-IN"):"—"}</p></div><div><p className="text-xs text-slate-500">End</p><p className="mt-1 font-semibold">{selected?.endDate?new Date(selected.endDate).toLocaleString("en-IN"):"—"}</p></div></div></section>
- <section className="rounded-2xl border bg-white p-4 shadow-sm"><label className="mb-2 block text-sm font-semibold">Select assigned training</label><select value={trainingId} onChange={e=>setTrainingId(e.target.value)} className="w-full rounded-xl border px-3 py-3 text-sm"><option value="">Select training</option>{trainings.map(t=><option key={t._id} value={t._id}>{t.title} — {t.trainerName||"No trainer"}</option>)}</select></section>
- <section className="overflow-hidden rounded-2xl border bg-white shadow-sm"><div className="flex flex-col gap-3 border-b p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Trainees</h2><p className="text-sm text-slate-500">{rows.length} assigned participant(s)</p></div><button onClick={downloadAttendance} disabled={!rows.length} className="inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold disabled:opacity-50"><Download size={16}/>Download attendance</button>{canMark&&<button onClick={save} disabled={!rows.length||saving||loading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Save size={17}/>{saving?"Saving...":"Save Attendance"}</button>}</div><div className="overflow-x-auto">{loading?<p className="p-10 text-center text-sm text-slate-500">Loading attendance...</p>:<table className="min-w-[850px] w-full text-sm"><thead className="bg-slate-50"><tr>{["Sl No","Emp ID","Name","Department","Attendance","Feedback"].map(x=><th key={x} className="p-4 text-left font-semibold text-slate-600">{x}</th>)}</tr></thead><tbody>{rows.length?rows.map((r,i)=><tr key={r.employeeId} className="border-t"><td className="p-4">{i+1}</td><td className="p-4 font-medium">{r.employeeId}</td><td className="p-4">{r.employeeName}</td><td className="p-4">{r.department}</td><td className="p-4">{canMark?<select value={r.attendance} onChange={e=>setRows(old=>old.map(x=>x.employeeId===r.employeeId?{...x,attendance:e.target.value as Row["attendance"]}:x))} className="rounded-lg border px-3 py-2"><option>Pending</option><option>Present</option><option>Absent</option><option>Partial</option></select>:<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">{r.attendance}</span>}</td><td className="p-4"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">{r.feedbackStatus}</span></td></tr>):<tr><td colSpan={6} className="p-10 text-center text-slate-500">No assigned trainees found.</td></tr>}</tbody></table>}</div></section></div>
+type Training = {
+    _id: string;
+    title: string;
+    startDate?: string;
+    endDate?: string;
+    trainerName?: string;
+    trainerEmployeeId?: string;
+    venue?: string;
+    status?: string;
+};
+type Row = {
+    employeeId: string;
+    employeeName: string;
+    department: string;
+    attendance: "Present" | "Absent" | "Partial" | "Pending";
+    feedbackStatus: string;
+    trainingTitle?: string;
+};
+export default function Attendance() {
+    const { user } = useAuth();
+    const [trainings, setTrainings] = useState<Training[]>([]);
+    const [trainingId, setTrainingId] = useState("");
+    const [rows, setRows] = useState<Row[]>([]);
+    const [search, setSearch] = useState("");
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+    const [message, setMessage] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const loadTrainings = async () => { const r = await api.get<Training[]>("/attendance/trainings"); setTrainings(r.data || []); if (!trainingId && r.data?.[0])
+        setTrainingId(r.data[0]._id); };
+    useEffect(() => { loadTrainings().catch(() => { }); }, []);
+    useEffect(() => { if (!trainingId)
+        return; setLoading(true); const q = new URLSearchParams({ trainingId }); if (search)
+        q.set("search", search); if (startDate)
+        q.set("startDate", startDate); if (endDate)
+        q.set("endDate", endDate); api.get<Row[]>(`/attendance?${q}`).then(r => setRows(r.data || [])).catch(() => setRows([])).finally(() => setLoading(false)); }, [trainingId, search, startDate, endDate]);
+    const selected = useMemo(() => trainings.find(t => t._id === trainingId), [trainings, trainingId]);
+    const canMark = selected?.trainerEmployeeId === user?.employeeId || user?.role === "HR_ADMIN" || user?.role === "MANAGER";
+    const downloadAttendance = () => { const headers = ["Training", "Training Date", "Employee ID", "Employee Name", "Department", "Attendance", "Feedback Status"]; const data = rows.map(r => [selected?.title || "", selected?.startDate || "", r.employeeId, r.employeeName, r.department, r.attendance, r.feedbackStatus]); const csv = [headers, ...data].map(row => row.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n"); const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8;" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `attendance-${(selected?.title || "training").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`; a.click(); URL.revokeObjectURL(url); };
+    const save = async () => { try {
+        setSaving(true);
+        await api.post("/attendance/bulk", { trainingId, rows: rows.map(r => ({ employeeId: r.employeeId, attendance: r.attendance })) });
+        setMessage("Attendance saved successfully.");
+        setTimeout(() => setMessage(""), 3000);
+        const r = await api.get<Row[]>(`/attendance?trainingId=${trainingId}`);
+        setRows(r.data || []);
+    }
+    catch (e: any) {
+        setMessage(e?.response?.data?.message || "Unable to save attendance.");
+    }
+    finally {
+        setSaving(false);
+    } };
+    return <div className="space-y-6"><div><p className="text-sm font-medium text-indigo-600">Training Attendance</p><h1 className="mt-1 text-2xl font-bold sm:text-3xl">Attendance</h1><p className="mt-2 text-sm text-slate-500">Assigned trainings only. The assigned trainer can mark trainee attendance.</p></div>{message && <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm font-medium text-emerald-700"><CheckCircle2 size={18}/>{message}</div>}
+ <section className="rounded-2xl border bg-white p-5 shadow-sm"><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4"><div className="relative lg:col-span-2"><Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search training, trainee or trainer" className="w-full rounded-xl border px-10 py-3 text-sm"/></div><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="rounded-xl border px-3 py-3 text-sm"/><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="rounded-xl border px-3 py-3 text-sm"/></div><div className="mt-4 grid gap-3 md:grid-cols-2"><div><p className="text-xs text-slate-500">Training</p><p className="mt-1 font-semibold">{selected?.title || "No training selected"}</p></div><div><p className="text-xs text-slate-500">Trainer</p><p className="mt-1 font-semibold">{selected?.trainerName || "—"} {selected?.trainerEmployeeId ? `(${selected.trainerEmployeeId})` : ""}</p></div><div><p className="text-xs text-slate-500">Start</p><p className="mt-1 font-semibold">{selected?.startDate ? new Date(selected.startDate).toLocaleString("en-IN") : "—"}</p></div><div><p className="text-xs text-slate-500">End</p><p className="mt-1 font-semibold">{selected?.endDate ? new Date(selected.endDate).toLocaleString("en-IN") : "—"}</p></div></div></section>
+ <section className="rounded-2xl border bg-white p-4 shadow-sm"><label className="mb-2 block text-sm font-semibold">Select assigned training</label><select value={trainingId} onChange={e => setTrainingId(e.target.value)} className="w-full rounded-xl border px-3 py-3 text-sm"><option value="">Select training</option>{trainings.map(t => <option key={t._id} value={t._id}>{t.title} — {t.trainerName || "No trainer"}</option>)}</select></section>
+ <section className="overflow-hidden rounded-2xl border bg-white shadow-sm"><div className="flex flex-col gap-3 border-b p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Trainees</h2><p className="text-sm text-slate-500">{rows.length} assigned participant(s)</p></div><button onClick={downloadAttendance} disabled={!rows.length} className="inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold disabled:opacity-50"><Download size={16}/>Download attendance</button>{canMark && <button onClick={save} disabled={!rows.length || saving || loading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Save size={17}/>{saving ? "Saving..." : "Save Attendance"}</button>}</div><div className="overflow-x-auto">{loading ? <p className="p-10 text-center text-sm text-slate-500">Loading attendance...</p> : <table className="min-w-[850px] w-full text-sm"><thead className="bg-slate-50"><tr>{["Sl No", "Emp ID", "Name", "Department", "Attendance", "Feedback"].map(x => <th key={x} className="p-4 text-left font-semibold text-slate-600">{x}</th>)}</tr></thead><tbody>{rows.length ? rows.map((r, i) => <tr key={r.employeeId} className="border-t"><td className="p-4">{i + 1}</td><td className="p-4 font-medium">{r.employeeId}</td><td className="p-4">{r.employeeName}</td><td className="p-4">{r.department}</td><td className="p-4">{canMark ? <select value={r.attendance} onChange={e => setRows(old => old.map(x => x.employeeId === r.employeeId ? { ...x, attendance: e.target.value as Row["attendance"] } : x))} className="rounded-lg border px-3 py-2"><option>Pending</option><option>Present</option><option>Absent</option><option>Partial</option></select> : <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">{r.attendance}</span>}</td><td className="p-4"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">{r.feedbackStatus}</span></td></tr>) : <tr><td colSpan={6} className="p-10 text-center text-slate-500">No assigned trainees found.</td></tr>}</tbody></table>}</div></section></div>;
 }

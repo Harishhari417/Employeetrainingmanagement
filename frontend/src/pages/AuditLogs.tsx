@@ -1,44 +1,49 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, RefreshCw, Search } from "lucide-react";
 import { api } from "../services/api";
-
-type AuditRow = { actorEmployeeId?: string; actorRole?: string; action?: string; entityType?: string; entityId?: string; details?: Record<string, unknown>; createdAt?: string };
-
+type AuditRow = {
+    actorEmployeeId?: string;
+    actorRole?: string;
+    action?: string;
+    entityType?: string;
+    entityId?: string;
+    details?: Record<string, unknown>;
+    createdAt?: string;
+};
 export default function AuditLogs() {
-  const [rows, setRows] = useState<AuditRow[]>([]);
-  const [search, setSearch] = useState("");
-  const [action, setAction] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const load = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const response = await api.get("/reports/audit", { params: action ? { action } : {} });
-      setRows(Array.isArray(response.data) ? response.data : []);
-    } catch (e: any) {
-      setError(e?.response?.data?.message || "Could not load audit history. Confirm that you are signed in as HR Admin.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { void load(); }, [action]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => [r.actorEmployeeId, r.actorRole, r.action, r.entityType, r.entityId, JSON.stringify(r.details || {})].join(" ").toLowerCase().includes(q));
-  }, [rows, search]);
-
-  const dateText = (value?: string) => {
-    if (!value) return "—";
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
-  };
-
-  return <main className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+    const [rows, setRows] = useState<AuditRow[]>([]);
+    const [search, setSearch] = useState("");
+    const [action, setAction] = useState("");
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+    const load = async () => {
+        setLoading(true);
+        setError("");
+        try {
+            const response = await api.get("/reports/audit", { params: action ? { action } : {} });
+            setRows(Array.isArray(response.data) ? response.data : []);
+        }
+        catch (e: any) {
+            setError(e?.response?.data?.message || "Could not load audit history. Confirm that you are signed in as HR Admin.");
+        }
+        finally {
+            setLoading(false);
+        }
+    };
+    useEffect(() => { void load(); }, [action]);
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q)
+            return rows;
+        return rows.filter((r) => [r.actorEmployeeId, r.actorRole, r.action, r.entityType, r.entityId, JSON.stringify(r.details || {})].join(" ").toLowerCase().includes(q));
+    }, [rows, search]);
+    const dateText = (value?: string) => {
+        if (!value)
+            return "—";
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
+    };
+    return <main className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Administration</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Audit history</h1><p className="mt-1 text-sm text-slate-500">Review training, attendance and feedback changes recorded by the system.</p></div>
       <button onClick={() => void load()} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"><RefreshCw size={16}/> Refresh</button>

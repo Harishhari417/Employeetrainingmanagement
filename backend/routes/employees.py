@@ -168,6 +168,7 @@ def update_employee(employee_id):
         "designation",
         "reportingManager",
         "email",
+        "mobile",
         "status"
     ]
 
